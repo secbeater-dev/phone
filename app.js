@@ -15,8 +15,8 @@
     callColumnWidths: "phone-workbench-call-column-widths-v1",
     theme: "phone-workbench-theme",
     sidebarCollapsed: "phone-workbench-sidebar-collapsed",
-    noticeDismissed: "phone-workbench-notice-dismissed",
   };
+  const SUPPORT_PASSWORD_SHA256 = "44d987773df84d3bdb849615d9f4d37567d46759e2fbeff2809ffe403af04aef";
   const LOCAL_EXPORT_VERSION = "phone-workbench-local-settings-v1";
   const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}-${String(hour + 1).padStart(2, "0")}`);
   const CALL_COLUMNS = [
@@ -63,7 +63,6 @@
     callColumnWidths: {},
     theme: "light",
     sidebarCollapsed: false,
-    noticeDismissed: false,
     activeColumnResize: null,
   };
 
@@ -129,12 +128,17 @@
     $("importLocalSettingsInput")?.addEventListener("change", importLocalSettings);
     $("sidebarCollapseButton")?.addEventListener("click", toggleSidebarCollapsed);
     $("themeToggleButton")?.addEventListener("click", toggleTheme);
-    $("openNoticeButton")?.addEventListener("click", () => showUsageNotice());
-    $("noticeDismissButton")?.addEventListener("click", () => hideUsageNotice(true));
-    $("supportTypesButton")?.addEventListener("click", toggleSupportFileTypes);
+    $("noticeDismissButton")?.addEventListener("click", hideUsageNotice);
+    $("supportTypesButton")?.addEventListener("click", verifySupportPassword);
+    $("supportPasswordInput")?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        verifySupportPassword();
+      }
+    });
     $("oneClickUpdateButton")?.addEventListener("click", runOneClickUpdate);
     $("usageNoticeModal")?.addEventListener("click", (event) => {
-      if (event.target === $("usageNoticeModal")) hideUsageNotice(true);
+      if (event.target === $("usageNoticeModal")) hideUsageNotice();
     });
     document.addEventListener("pointermove", handleCallColumnResizeMove);
     document.addEventListener("pointerup", handleCallColumnResizeEnd);
@@ -176,7 +180,7 @@
   }
 
   function maybeShowUsageNotice() {
-    if (!state.noticeDismissed) showUsageNotice();
+    showUsageNotice();
   }
 
   function showUsageNotice() {
@@ -186,21 +190,47 @@
     $("noticeDismissButton")?.focus();
   }
 
-  function hideUsageNotice(persist) {
+  function hideUsageNotice() {
     const modal = $("usageNoticeModal");
     if (modal) modal.hidden = true;
-    if (persist) {
-      state.noticeDismissed = true;
-      localStorage.setItem(STORAGE_KEYS.noticeDismissed, "true");
+  }
+
+  async function verifySupportPassword() {
+    const panel = $("supportTypesPanel");
+    const button = $("supportTypesButton");
+    const input = $("supportPasswordInput");
+    const message = $("supportPasswordMessage");
+    if (!panel) return;
+    if (!panel.hidden) {
+      panel.hidden = true;
+      if (button) button.textContent = "顯示支援檔案類型";
+      if (message) message.textContent = "";
+      return;
+    }
+    const password = input?.value || "";
+    const digest = await sha256Hex(password);
+    if (digest === SUPPORT_PASSWORD_SHA256) {
+      panel.hidden = false;
+      if (button) button.textContent = "隱藏支援檔案類型";
+      if (message) {
+        message.classList.remove("danger-text");
+        message.classList.add("success-text");
+        message.textContent = "已解鎖支援檔案類型。";
+      }
+    } else if (message) {
+      const supportHelpText = "請找 Telegram 管理員領取";
+      panel.hidden = true;
+      message.classList.remove("success-text");
+      message.classList.add("danger-text");
+      message.innerHTML = `${supportHelpText.replace("Telegram", '<a href="https://t.me/secbeater" target="_blank" rel="noopener noreferrer">Telegram</a>')}。`;
     }
   }
 
-  function toggleSupportFileTypes() {
-    const panel = $("supportTypesPanel");
-    const button = $("supportTypesButton");
-    if (!panel) return;
-    panel.hidden = !panel.hidden;
-    if (button) button.textContent = panel.hidden ? "顯示支援檔案類型" : "隱藏支援檔案類型";
+  async function sha256Hex(value) {
+    if (!globalThis.crypto?.subtle || typeof TextEncoder === "undefined") return "";
+    const bytes = new TextEncoder().encode(String(value || ""));
+    const hash = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(hash)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
   }
 
   function runOneClickUpdate() {
@@ -234,7 +264,6 @@
     state.callColumnWidths = normalizeColumnWidths(readJson(localStorage.getItem(STORAGE_KEYS.callColumnWidths), {}));
     state.theme = localStorage.getItem(STORAGE_KEYS.theme) === "dark" ? "dark" : "light";
     state.sidebarCollapsed = localStorage.getItem(STORAGE_KEYS.sidebarCollapsed) === "true";
-    state.noticeDismissed = localStorage.getItem(STORAGE_KEYS.noticeDismissed) === "true";
     const storedHours = readJson(localStorage.getItem(STORAGE_KEYS.hourSelection), null);
     if (Array.isArray(storedHours)) {
       state.hourSelection = new Set(storedHours.map(Number).filter((hour) => hour >= 0 && hour <= 23));
@@ -306,6 +335,7 @@
     state.cases.push(workspace?.case || {});
     state.callRecords = workspace?.records || [];
     state.expandedHotspotAddress = "";
+    prefillSubmissionPhones(state.callRecords);
     renderAllViews();
   }
 
@@ -501,6 +531,23 @@
     $("profileContent").innerHTML = entries.length
       ? entries.map(([key, value]) => `<dt>${escapeHtml(key)}</dt><dd>${escapeHtml(String(value || ""))}</dd>`).join("")
       : `<dt>狀態</dt><dd>尚未匯入資料。</dd>`;
+    renderProfileImeiList();
+  }
+
+  function renderProfileImeiList() {
+    const target = $("profileImeiList");
+    if (!target) return;
+    const imeis = collectUniqueImeis(state.callRecords);
+    target.innerHTML = imeis.length
+      ? imeis.map((imei) => `<span class="imei-chip">${escapeHtml(imei)}</span>`).join("")
+      : `<p class="muted">尚無 IMEI 資料。</p>`;
+  }
+
+  function collectUniqueImeis(records) {
+    return Array.from(new Set((records || [])
+      .map((record) => cellText(record?.imei))
+      .filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b, "zh-Hant", { numeric: true }));
   }
 
   function renderStatsView() {
@@ -704,6 +751,41 @@
     $("submissionStatus").textContent = "已下載 CSV。";
   }
 
+  function prefillSubmissionPhones(records) {
+    const input = $("submissionPhonesInput");
+    if (!input) return [];
+    const phones = collectSubmissionPhones(records);
+    input.value = phones.join("\n");
+    const status = $("submissionStatus");
+    if (status) status.textContent = phones.length ? `已自匯入資料填入 ${phones.length} 支不重複電話。` : "";
+    return phones;
+  }
+
+  function collectSubmissionPhones(records) {
+    const fields = [
+      "target_phone",
+      "counterparty_phone",
+      "msisdn",
+      "phone",
+      "subject_phone",
+      "subscriber_phone",
+      "application_phone",
+      "query_phone",
+    ];
+    const seen = new Set();
+    const phones = [];
+    (records || []).forEach((record) => {
+      fields.forEach((field) => {
+        const phone = normalizePhoneText(record?.[field]);
+        if (phone && !seen.has(phone)) {
+          seen.add(phone);
+          phones.push(phone);
+        }
+      });
+    });
+    return phones;
+  }
+
   function buildSubmissionCsv({ phones, start, end }) {
     const rows = normalizeSubmissionPhones(phones).valid;
     const header = ["phone", "start_at", "end_at"];
@@ -762,7 +844,6 @@
       callColumnWidths: state.callColumnWidths,
       theme: state.theme,
       sidebarCollapsed: state.sidebarCollapsed,
-      noticeDismissed: state.noticeDismissed,
     };
     downloadText(`phone-settings-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
     $("exportMessage").textContent = "已匯出本機設定。";
@@ -800,10 +881,6 @@
         state.sidebarCollapsed = payload.sidebarCollapsed;
         localStorage.setItem(STORAGE_KEYS.sidebarCollapsed, state.sidebarCollapsed ? "true" : "false");
         syncSidebarCollapsed();
-      }
-      if (typeof payload.noticeDismissed === "boolean") {
-        state.noticeDismissed = payload.noticeDismissed;
-        localStorage.setItem(STORAGE_KEYS.noticeDismissed, state.noticeDismissed ? "true" : "false");
       }
       $("exportMessage").textContent = "已匯入本機設定。";
     } catch (error) {
@@ -1892,6 +1969,8 @@
     computeHourBuckets,
     computeAddressHotspots,
     buildSubmissionCsv,
+    collectSubmissionPhones,
+    collectUniqueImeis,
     normalizePhoneText,
     tellowsUrl,
     hourButtonLabel,

@@ -44,10 +44,6 @@
             <span class="tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h10M4 19h16"/><path d="m18 9 3 3-3 3"/></svg></span>
             <span class="tool-label">縮放側邊欄</span>
           </button>
-          <button id="openNoticeButton" class="sidebar-tool-button" type="button" title="使用提醒">
-            <span class="tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 4.3 2.8 17.2A2 2 0 0 0 4.5 20h15a2 2 0 0 0 1.7-2.8L13.7 4.3a2 2 0 0 0-3.4 0Z"/></svg></span>
-            <span class="tool-label">使用提醒</span>
-          </button>
           <button id="themeToggleButton" class="sidebar-tool-button" type="button" title="深色模式" aria-pressed="false">
             <span class="tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 12.7A8 8 0 1 1 11.3 3 6.2 6.2 0 0 0 21 12.7Z"/></svg></span>
             <span class="tool-label">深色模式</span>
@@ -57,7 +53,6 @@
       <main class="workspace">
         <header class="topbar">
           <div class="topbar-title">
-            <p class="eyebrow">Frontend-only CDR analysis</p>
             <h2 id="pageTitle">時間分布圖</h2>
           </div>
         </header>
@@ -122,6 +117,12 @@
             <div class="section-title"><h2>用戶資料</h2></div>
             <div class="metric-row profile-summary-grid" id="profileSummaryCards"></div>
             <dl id="profileContent" class="detail-list"></dl>
+            <section class="profile-imei-section">
+              <div class="section-title compact">
+                <h3>所有 IMEI 列表</h3>
+              </div>
+              <div id="profileImeiList" class="profile-imei-list"></div>
+            </section>
           </section>
         </section>
 
@@ -188,17 +189,27 @@
     <section id="usageNoticeModal" class="usage-modal" role="dialog" aria-modal="true" aria-labelledby="usageNoticeTitle" hidden>
       <div class="usage-modal-card">
         <div class="usage-modal-main">
-          <p class="eyebrow">SecBeater Notice</p>
           <h2 id="usageNoticeTitle">使用提醒</h2>
-          <p>資料均在本地運行，請安心使用。(基地台轉經緯度太難達成，如果有人有好解法，請跟我說)</p>
-          <p>任何問題歡迎於 <a href="https://t.me/secbeater" target="_blank" rel="noopener noreferrer">Telegram</a> 中提出。</p>
-          <h3>今日重點（2026-06-28）</h3>
-          <ul class="notice-list">
-            <li>新增深色模式。</li>
-            <li>新增留言板。</li>
-            <li>新增縮放功能。</li>
-          </ul>
-          <p class="notice-note">備註：一鍵更新會清除本機設定（地圖/停車/彈窗狀態），並強制重載最新版（等同 Ctrl+F5）。</p>
+          <div class="usage-summary">
+            <p>資料均在本地運行，請安心使用。(基地台轉經緯度太難達成，如果有人有好解法，請跟我說)</p>
+            <p>任何問題歡迎於 <a href="https://t.me/secbeater" target="_blank" rel="noopener noreferrer">Telegram</a> 中提出。</p>
+          </div>
+          <section class="notice-focus">
+            <h3>今日重點（2026-06-28）</h3>
+            <ul class="notice-list">
+              <li>新增深色模式。</li>
+              <li>新增留言板。</li>
+              <li>新增縮放功能。</li>
+            </ul>
+          </section>
+          <p class="notice-note">備註：一鍵更新會清除本機設定（所有資料），並強制重載最新版（等同 Ctrl+F5）。</p>
+          <div class="support-unlock">
+            <label class="field-label">支援檔案類型密碼
+              <input id="supportPasswordInput" class="text-input" type="password" autocomplete="off" placeholder="請輸入密碼" />
+            </label>
+            <button id="supportTypesButton" class="secondary-button" type="button">顯示支援檔案類型</button>
+            <p id="supportPasswordMessage" class="message support-password-message" aria-live="polite"></p>
+          </div>
           <div id="supportTypesPanel" class="support-types-panel" hidden>
             <h3>目前支援檔案類型</h3>
             <ul>
@@ -213,9 +224,8 @@
             </ul>
           </div>
           <div class="usage-modal-actions">
-            <button id="oneClickUpdateButton" class="primary-button" type="button">一鍵更新（Ctrl+F5＋清除設定）</button>
-            <button id="supportTypesButton" class="secondary-button" type="button">顯示支援檔案類型</button>
-            <button id="noticeDismissButton" class="secondary-button" type="button">我知道了</button>
+            <button id="oneClickUpdateButton" class="secondary-button" type="button">一鍵更新（Ctrl+F5＋清除設定）</button>
+            <button id="noticeDismissButton" class="primary-button" type="button">我知道了</button>
           </div>
         </div>
         <aside class="usage-modal-aside">
