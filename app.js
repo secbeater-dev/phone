@@ -12,9 +12,21 @@
     statsRankMode: "phone-workbench-stats-rank-mode",
     hourSelection: "phone-workbench-hour-selection",
     phoneNotes: "phone-workbench-phone-notes-v1",
+    callColumnWidths: "phone-workbench-call-column-widths-v1",
   };
   const LOCAL_EXPORT_VERSION = "phone-workbench-local-settings-v1";
   const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}-${String(hour + 1).padStart(2, "0")}`);
+  const CALL_COLUMNS = [
+    { key: "occurred_at", width: 168, min: 120 },
+    { key: "call_type", width: 110, min: 82 },
+    { key: "target_phone", width: 150, min: 120 },
+    { key: "target_note", width: 210, min: 150 },
+    { key: "counterparty_phone", width: 150, min: 120 },
+    { key: "counterparty_note", width: 210, min: 150 },
+    { key: "duration_seconds", width: 90, min: 72 },
+    { key: "imei", width: 160, min: 120 },
+    { key: "note", width: 220, min: 150 },
+  ];
   const VIEW_TITLES = {
     calls: "通聯列表",
     profile: "用戶資料",
@@ -45,6 +57,8 @@
     appliedHourSelection: new Set(Array.from({ length: 24 }, (_, index) => index)),
     expandedHotspotAddress: "",
     phoneNotes: {},
+    callColumnWidths: {},
+    activeColumnResize: null,
   };
 
   if (typeof document !== "undefined") {
@@ -57,6 +71,7 @@
     setSubmissionDefaults();
     renderHourTiles();
     renderAllViews();
+    initCallColumnResize();
   }
 
   function $(id) {
@@ -71,8 +86,13 @@
     $("fileInput")?.addEventListener("change", handleFileImport);
     $("recordSearch")?.addEventListener("input", renderTwoWayCalls);
     document.querySelector("#callsView thead")?.addEventListener("click", (event) => {
+      if (event.target.closest(".call-column-resizer")) return;
       const button = event.target.closest("[data-call-sort]");
       if (button) toggleCallSort(button.dataset.callSort);
+    });
+    $("callRows")?.addEventListener("input", (event) => {
+      const input = event.target.closest("[data-phone-note]");
+      if (input) updatePhoneNote(input.dataset.phoneNote, input.value, input);
     });
     document.querySelectorAll("[data-stats-rank-mode]").forEach((button) => {
       button.addEventListener("click", () => setPhoneStatsRankMode(button.dataset.statsRankMode));
@@ -98,6 +118,8 @@
     $("importWorkspaceInput")?.addEventListener("change", importWorkspaceJson);
     $("exportLocalSettingsButton")?.addEventListener("click", exportLocalSettings);
     $("importLocalSettingsInput")?.addEventListener("change", importLocalSettings);
+    document.addEventListener("pointermove", handleCallColumnResizeMove);
+    document.addEventListener("pointerup", handleCallColumnResizeEnd);
   }
 
   function setView(view) {
@@ -116,6 +138,7 @@
   function restoreSettings() {
     state.phoneStatsRankMode = localStorage.getItem(STORAGE_KEYS.statsRankMode) === "seconds" ? "seconds" : "count";
     state.phoneNotes = normalizePhoneNotes(readJson(localStorage.getItem(STORAGE_KEYS.phoneNotes), {}));
+    state.callColumnWidths = normalizeColumnWidths(readJson(localStorage.getItem(STORAGE_KEYS.callColumnWidths), {}));
     const storedHours = readJson(localStorage.getItem(STORAGE_KEYS.hourSelection), null);
     if (Array.isArray(storedHours)) {
       state.hourSelection = new Set(storedHours.map(Number).filter((hour) => hour >= 0 && hour <= 23));
@@ -216,24 +239,49 @@
     return `<div class="metric-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`;
   }
 
+  function callPhoneLink(phone) {
+    const normalized = normalizePhoneText(phone);
+    if (!normalized) return "";
+    return `<a class="phone-link" href="${tellowsUrl(normalized)}" title="點我查詢" target="_blank" rel="noopener noreferrer">${escapeHtml(normalized)}</a>`;
+  }
+
+  function callPhoneNoteInput(phone, label) {
+    const normalized = normalizePhoneText(phone);
+    if (!normalized) return "";
+    return `<input class="phone-note-input call-note-input" data-phone-note="${escapeHtml(normalized)}" value="${escapeHtml(phoneNote(normalized))}" aria-label="${escapeHtml(label)} ${escapeHtml(normalized)}" />`;
+  }
+
   function renderTwoWayCalls() {
     const query = ($("recordSearch")?.value || "").trim().toLowerCase();
     const rows = sortedCallRecords().filter((record) => {
       if (!query) return true;
-      return [record.occurred_at, record.call_type, record.target_phone, record.counterparty_phone, record.imei, record.external_ip, record.note]
+      return [
+        record.occurred_at,
+        record.call_type,
+        record.target_phone,
+        record.counterparty_phone,
+        phoneNote(record.target_phone),
+        phoneNote(record.counterparty_phone),
+        record.imei,
+        record.external_ip,
+        record.note,
+      ]
         .some((value) => String(value || "").toLowerCase().includes(query));
     });
     $("callRows").innerHTML = rows.length
       ? rows.slice(0, 5000).map((record) => `<tr>
           <td>${escapeHtml(record.occurred_at || "")}</td>
           <td>${escapeHtml(record.call_type || "")}</td>
-          <td>${escapeHtml(record.target_phone || "")}</td>
-          <td>${escapeHtml(record.counterparty_phone || "")}</td>
+          <td>${callPhoneLink(record.target_phone)}</td>
+          <td>${callPhoneNoteInput(record.target_phone, "目標電話備註(只存瀏覽器)")}</td>
+          <td>${callPhoneLink(record.counterparty_phone)}</td>
+          <td>${callPhoneNoteInput(record.counterparty_phone, "對象電話備註(只存瀏覽器)")}</td>
           <td>${escapeHtml(String(record.duration_seconds ?? ""))}</td>
           <td>${escapeHtml(record.imei || "")}</td>
           <td>${escapeHtml(record.external_ip || record.note || "")}</td>
         </tr>`).join("")
-      : `<tr><td colspan="7">尚未匯入資料。</td></tr>`;
+      : `<tr><td colspan="9">尚未匯入資料。</td></tr>`;
+    applyCallColumnWidths();
   }
 
   function sortedCallRecords() {
@@ -260,6 +308,94 @@
       state.callSort = { column, direction: "asc" };
     }
     renderTwoWayCalls();
+  }
+
+  function initCallColumnResize() {
+    const headers = Array.from(document.querySelectorAll("#callsView th"));
+    headers.forEach((th, index) => {
+      const column = CALL_COLUMNS[index];
+      if (!column) return;
+      th.dataset.callColumn = column.key;
+      if (!th.querySelector(".call-column-resizer")) {
+        const handle = document.createElement("span");
+        handle.className = "call-column-resizer";
+        handle.setAttribute("role", "separator");
+        handle.setAttribute("aria-orientation", "vertical");
+        handle.setAttribute("aria-label", "調整欄寬");
+        handle.dataset.callColumn = column.key;
+        handle.addEventListener("pointerdown", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const width = columnWidth(column);
+          state.activeColumnResize = {
+            key: column.key,
+            startX: event.clientX,
+            startWidth: width,
+            min: column.min,
+          };
+          handle.setPointerCapture?.(event.pointerId);
+          document.body.classList.add("resizing-call-column");
+        });
+        th.appendChild(handle);
+      }
+    });
+    applyCallColumnWidths();
+  }
+
+  function handleCallColumnResizeMove(event) {
+    if (!state.activeColumnResize) return;
+    resizeCallColumn(event.clientX);
+  }
+
+  function handleCallColumnResizeEnd() {
+    if (!state.activeColumnResize) return;
+    persistCallColumnWidths();
+    state.activeColumnResize = null;
+    document.body.classList.remove("resizing-call-column");
+  }
+
+  function resizeCallColumn(clientX) {
+    const resize = state.activeColumnResize;
+    if (!resize) return;
+    const width = Math.max(resize.min, Math.round(resize.startWidth + clientX - resize.startX));
+    state.callColumnWidths[resize.key] = width;
+    applyCallColumnWidths();
+  }
+
+  function applyCallColumnWidths() {
+    const table = document.querySelector("#callsView table");
+    if (!table) return;
+    const widths = CALL_COLUMNS.map((column) => columnWidth(column));
+    table.style.minWidth = `${widths.reduce((sum, width) => sum + width, 0)}px`;
+    document.querySelectorAll("#callsView tr").forEach((row) => {
+      Array.from(row.children).forEach((cell, index) => {
+        const width = widths[index];
+        if (!width) return;
+        cell.style.width = `${width}px`;
+        cell.style.minWidth = `${width}px`;
+        cell.style.maxWidth = `${width}px`;
+      });
+    });
+  }
+
+  function columnWidth(column) {
+    const stored = Number(state.callColumnWidths[column.key]);
+    return Number.isFinite(stored) && stored >= column.min ? stored : column.width;
+  }
+
+  function persistCallColumnWidths() {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(STORAGE_KEYS.callColumnWidths, JSON.stringify(state.callColumnWidths));
+  }
+
+  function normalizeColumnWidths(widths) {
+    const normalized = {};
+    Object.entries(widths || {}).forEach(([key, value]) => {
+      const column = CALL_COLUMNS.find((item) => item.key === key);
+      const width = Number(value);
+      if (column && Number.isFinite(width) && width >= column.min) normalized[key] = Math.round(width);
+    });
+    return normalized;
   }
 
   function renderProfileView() {
@@ -527,6 +663,7 @@
       phoneStatsRankMode: state.phoneStatsRankMode,
       hourSelection: Array.from(state.hourSelection).sort((a, b) => a - b),
       phoneNotes: state.phoneNotes,
+      callColumnWidths: state.callColumnWidths,
     };
     downloadText(`phone-settings-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
     $("exportMessage").textContent = "已匯出本機設定。";
@@ -548,6 +685,12 @@
         state.phoneNotes = normalizePhoneNotes(payload.phoneNotes);
         persistPhoneNotes();
         renderStatsView();
+        renderTwoWayCalls();
+      }
+      if (payload.callColumnWidths && typeof payload.callColumnWidths === "object") {
+        state.callColumnWidths = normalizeColumnWidths(payload.callColumnWidths);
+        persistCallColumnWidths();
+        applyCallColumnWidths();
       }
       $("exportMessage").textContent = "已匯入本機設定。";
     } catch (error) {
