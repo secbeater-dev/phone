@@ -267,6 +267,26 @@ th { position: sticky; top: 0; z-index: 1; background: #f1f3f6; }
 }
 .stats-table-row:last-child { border-bottom: 0; }
 .stats-table-head { background: #f1f3f6; font-weight: 700; }
+.phone-link {
+  color: #111;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.phone-link:hover { color: var(--accent-strong); }
+.phone-note-input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+.phone-note-input:focus {
+  border-color: var(--accent);
+  outline: 2px solid rgba(245, 124, 0, 0.16);
+}
 
 .hour-grid {
   display: grid;
@@ -278,36 +298,135 @@ th { position: sticky; top: 0; z-index: 1; background: #f1f3f6; }
   min-height: 38px;
   border: 1px solid var(--line);
   border-radius: 8px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+.hour-tile.day-hour {
   background: #fff;
+  color: #111;
 }
-.hour-tile.active { border-color: var(--accent); color: var(--accent-strong); font-weight: 700; }
-.hour-chart { display: grid; gap: 7px; margin: 12px 0; }
-.hour-bar-row {
+.hour-tile.night-hour {
+  background: #111;
+  color: #fff;
+}
+.hour-tile.inactive {
+  opacity: 0.36;
+  font-weight: 600;
+}
+.hour-tile.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(245, 124, 0, 0.24);
+}
+.hour-chart { margin: 12px 0; }
+.hour-chart-vertical {
   display: grid;
-  grid-template-columns: 70px minmax(0, 1fr) 70px;
-  gap: 10px;
-  align-items: center;
+  grid-template-columns: repeat(24, minmax(34px, 1fr));
+  gap: 8px;
+  min-height: 330px;
+  overflow-x: auto;
+  padding: 8px 0 4px;
 }
-.hour-bar-track {
-  min-height: 22px;
-  border-radius: 999px;
-  background: #eceff4;
+.hour-column {
+  display: grid;
+  grid-template-rows: 26px 220px 34px;
+  gap: 6px;
+  min-width: 34px;
+  align-items: end;
+  text-align: center;
+}
+.hour-bar-count {
+  align-self: center;
+  color: #111;
+  font-size: 12px;
+  font-weight: 800;
+}
+.hour-bar-frame {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 220px;
+  border: 1px solid var(--line);
+  border-radius: 8px 8px 4px 4px;
+  background:
+    linear-gradient(to top,
+      transparent 0,
+      transparent calc(25% - 1px),
+      rgba(17, 17, 17, 0.12) 25%,
+      transparent calc(25% + 1px),
+      transparent calc(50% - 1px),
+      rgba(17, 17, 17, 0.12) 50%,
+      transparent calc(50% + 1px),
+      transparent calc(75% - 1px),
+      rgba(17, 17, 17, 0.12) 75%,
+      transparent calc(75% + 1px),
+      transparent 100%),
+    #f7f8fa;
   overflow: hidden;
 }
 .hour-bar-fill {
-  height: 100%;
-  min-width: 2px;
-  background: linear-gradient(90deg, var(--accent), #ffb347);
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 0;
+  background: #111;
+}
+.hour-bar-percent {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.84);
+  color: #111;
+  font-size: 11px;
+  font-weight: 800;
+  transform: translate(-50%, -50%);
+}
+.hour-label-full {
+  align-self: start;
+  color: #333;
+  font-size: 11px;
+  font-weight: 700;
 }
 .hotspot-list { display: grid; gap: 8px; margin-top: 10px; }
 .hotspot-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
+  width: 100%;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
+  color: var(--ink);
+  text-align: left;
+}
+.hotspot-item:hover,
+.hotspot-item:focus,
+.hotspot-item.expanded {
+  border-color: #111;
+  box-shadow: 0 0 0 2px rgba(17, 17, 17, 0.08);
+}
+.hotspot-item:focus { outline: none; }
+.hotspot-item small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+}
+.hotspot-times {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 4px 12px;
+  max-height: 260px;
+  margin: 4px 0 0;
+  padding: 10px 10px 10px 28px;
+  overflow: auto;
+  border-radius: 8px;
+  background: #f4f5f7;
+  font-size: 13px;
 }
 
 .submission-layout {

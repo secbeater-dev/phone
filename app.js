@@ -11,6 +11,7 @@
     localSettings: "phone-workbench-local-settings-v1",
     statsRankMode: "phone-workbench-stats-rank-mode",
     hourSelection: "phone-workbench-hour-selection",
+    phoneNotes: "phone-workbench-phone-notes-v1",
   };
   const LOCAL_EXPORT_VERSION = "phone-workbench-local-settings-v1";
   const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}-${String(hour + 1).padStart(2, "0")}`);
@@ -42,6 +43,8 @@
     phoneStatsRankMode: "count",
     hourSelection: new Set(Array.from({ length: 24 }, (_, index) => index)),
     appliedHourSelection: new Set(Array.from({ length: 24 }, (_, index) => index)),
+    expandedHotspotAddress: "",
+    phoneNotes: {},
   };
 
   if (typeof document !== "undefined") {
@@ -73,6 +76,10 @@
     });
     document.querySelectorAll("[data-stats-rank-mode]").forEach((button) => {
       button.addEventListener("click", () => setPhoneStatsRankMode(button.dataset.statsRankMode));
+    });
+    $("statsContent")?.addEventListener("input", (event) => {
+      const input = event.target.closest("[data-phone-note]");
+      if (input) updatePhoneNote(input.dataset.phoneNote, input.value, input);
     });
     $("hourHotspotSearch")?.addEventListener("input", () => renderHourHotspots(filteredHourRecords()));
     $("hourSelectAll")?.addEventListener("click", () => {
@@ -108,6 +115,7 @@
 
   function restoreSettings() {
     state.phoneStatsRankMode = localStorage.getItem(STORAGE_KEYS.statsRankMode) === "seconds" ? "seconds" : "count";
+    state.phoneNotes = normalizePhoneNotes(readJson(localStorage.getItem(STORAGE_KEYS.phoneNotes), {}));
     const storedHours = readJson(localStorage.getItem(STORAGE_KEYS.hourSelection), null);
     if (Array.isArray(storedHours)) {
       state.hourSelection = new Set(storedHours.map(Number).filter((hour) => hour >= 0 && hour <= 23));
@@ -178,11 +186,11 @@
     state.currentWorkspace = workspace || null;
     state.cases.push(workspace?.case || {});
     state.callRecords = workspace?.records || [];
+    state.expandedHotspotAddress = "";
     renderAllViews();
   }
 
   function renderAllViews() {
-    renderSummaryCards();
     renderTwoWayCalls();
     renderProfileView();
     renderStatsView();
@@ -190,9 +198,11 @@
     renderSubmissionPreview();
   }
 
-  function renderSummaryCards() {
+  function renderProfileSummaryCards() {
     const summary = state.currentWorkspace?.case?.summary || {};
-    $("summaryCards").innerHTML = [
+    const target = $("profileSummaryCards");
+    if (!target) return;
+    target.innerHTML = [
       metricCard("通聯筆數", summary.records || 0),
       metricCard("目標電話", summary.target_phones || 0),
       metricCard("對象電話", summary.counterparty_phones || 0),
@@ -253,6 +263,7 @@
   }
 
   function renderProfileView() {
+    renderProfileSummaryCards();
     const subject = state.currentWorkspace?.case?.subject || {};
     const entries = Object.entries(subject);
     $("profileContent").innerHTML = entries.length
@@ -273,16 +284,69 @@
     return `<section class="stats-card"><h3>${escapeHtml(title)}</h3>${
       rows.length
         ? `<div class="stats-table" role="table">
-            <div class="stats-table-row stats-table-head" role="row"><span>#</span><span>電話</span><span>角色</span><span>次數</span><span>秒數</span></div>
-            ${rows.slice(0, 20).map((row, index) => `<div class="stats-table-row" role="row"><span>${index + 1}</span><span>${escapeHtml(row.phone)}</span><span>${escapeHtml(row.role)}</span><span>${row.count}</span><span>${row.seconds}</span></div>`).join("")}
+            <div class="stats-table-row stats-table-head" role="row"><span>#</span><span>電話</span><span>備註(只存瀏覽器)</span><span>次數</span><span>秒數</span></div>
+            ${rows.slice(0, 20).map((row, index) => `<div class="stats-table-row" role="row">
+              <span>${index + 1}</span>
+              <span><a class="phone-link" href="${tellowsUrl(row.phone)}" title="點我查詢" target="_blank" rel="noopener noreferrer">${escapeHtml(row.phone)}</a></span>
+              <span><input class="phone-note-input" data-phone-note="${escapeHtml(row.phone)}" value="${escapeHtml(phoneNote(row.phone))}" aria-label="備註(只存瀏覽器) ${escapeHtml(row.phone)}" /></span>
+              <span>${row.count}</span>
+              <span>${row.seconds}</span>
+            </div>`).join("")}
           </div>`
         : `<p class="muted">尚無資料</p>`
     }</section>`;
   }
 
+  function phoneNote(phone) {
+    return state.phoneNotes[normalizePhoneText(phone)] || "";
+  }
+
+  function updatePhoneNote(phone, note, sourceInput) {
+    const key = normalizePhoneText(phone);
+    if (!key) return;
+    const value = String(note || "");
+    if (value) state.phoneNotes[key] = value;
+    else delete state.phoneNotes[key];
+    persistPhoneNotes();
+    syncPhoneNoteInputs(key, value, sourceInput);
+  }
+
+  function persistPhoneNotes() {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(STORAGE_KEYS.phoneNotes, JSON.stringify(state.phoneNotes));
+  }
+
+  function syncPhoneNoteInputs(phone, value, sourceInput) {
+    if (typeof document === "undefined") return;
+    document.querySelectorAll("[data-phone-note]").forEach((input) => {
+      if (input === sourceInput) return;
+      if (normalizePhoneText(input.dataset.phoneNote) === phone) input.value = value;
+    });
+  }
+
+  function normalizePhoneNotes(notes) {
+    const normalized = {};
+    Object.entries(notes || {}).forEach(([phone, note]) => {
+      const key = normalizePhoneText(phone);
+      if (key && note) normalized[key] = String(note);
+    });
+    return normalized;
+  }
+
+  function tellowsUrl(phone) {
+    const normalized = normalizePhoneText(phone);
+    if (!normalized) return "https://www.tellows.tw/";
+    const international = normalized.startsWith("0") ? `886${normalized.slice(1)}` : normalized;
+    return `https://www.tellows.tw/num/%2B${international}`;
+  }
+
   function renderHourTiles() {
     if (!$("hourGrid")) return;
-    $("hourGrid").innerHTML = HOUR_LABELS.map((label, hour) => `<button class="hour-tile ${state.hourSelection.has(hour) ? "active" : ""}" data-hour="${hour}" type="button">${label}</button>`).join("");
+    $("hourGrid").innerHTML = HOUR_LABELS.map((label, hour) => {
+      const active = state.hourSelection.has(hour);
+      const tone = isNightHour(hour) ? "night-hour" : "day-hour";
+      return `<button class="hour-tile ${tone} ${active ? "active" : "inactive"}" data-hour="${hour}" type="button" aria-label="${label}">${hourButtonLabel(hour)}</button>`;
+    }).join("");
     $("hourGrid").querySelectorAll("[data-hour]").forEach((button) => {
       button.addEventListener("click", () => {
         const hour = Number(button.dataset.hour);
@@ -293,6 +357,20 @@
     });
   }
 
+  function hourButtonLabel(hour) {
+    return String(hour).padStart(2, "0");
+  }
+
+  function isNightHour(hour) {
+    return hour < 6 || hour >= 18;
+  }
+
+  function formatPercent(value) {
+    if (!Number.isFinite(value) || value <= 0) return "0%";
+    if (value >= 10) return `${Math.round(value)}%`;
+    return `${value.toFixed(1)}%`;
+  }
+
   function applyHourSelection() {
     state.appliedHourSelection = new Set(state.hourSelection);
     localStorage.setItem(STORAGE_KEYS.hourSelection, JSON.stringify(Array.from(state.hourSelection).sort((a, b) => a - b)));
@@ -300,10 +378,24 @@
   }
 
   function renderHoursView() {
-    const buckets = computeHourBuckets(filteredHourRecords());
+    const records = filteredHourRecords();
+    const buckets = computeHourBuckets(records);
     const max = Math.max(1, ...buckets.map((item) => item.count));
-    $("hourChart").innerHTML = buckets.map((item) => `<div class="hour-bar-row"><span>${item.label}</span><div class="hour-bar-track"><div class="hour-bar-fill" style="width:${(item.count / max) * 100}%"></div></div><strong>${item.count}</strong></div>`).join("");
-    renderHourHotspots(filteredHourRecords());
+    const total = buckets.reduce((sum, item) => sum + item.count, 0);
+    $("hourChart").className = "hour-chart hour-chart-vertical";
+    $("hourChart").innerHTML = buckets.map((item) => {
+      const height = item.count ? (item.count / max) * 100 : 0;
+      const percent = total ? (item.count / total) * 100 : 0;
+      return `<div class="hour-column" style="--bar-height:${height}%">
+        <div class="hour-bar-count">${item.count}</div>
+        <div class="hour-bar-frame">
+          <div class="hour-bar-fill" style="height:${height}%"></div>
+          <span class="hour-bar-percent">${formatPercent(percent)}</span>
+        </div>
+        <div class="hour-label-full">${item.label}</div>
+      </div>`;
+    }).join("");
+    renderHourHotspots(records);
   }
 
   function filteredHourRecords() {
@@ -316,13 +408,40 @@
 
   function renderHourHotspots(records) {
     const query = ($("hourHotspotSearch")?.value || "").trim().toLowerCase();
+    const hotspots = computeAddressHotspots(records, state.currentWorkspace?.base_stations || []);
     const filtered = query
-      ? records.filter((record) => [record.occurred_at, record.target_phone, record.counterparty_phone, record.imei, record.note, record.external_ip].some((value) => String(value || "").toLowerCase().includes(query)))
-      : records;
-    const buckets = computeHourBuckets(filtered).filter((item) => item.count > 0).sort((a, b) => b.count - a.count);
-    $("hourHotspotContent").innerHTML = buckets.length
-      ? buckets.slice(0, 12).map((item) => `<div class="hotspot-item"><strong>${item.label}</strong><span>${item.count} 筆</span></div>`).join("")
+      ? hotspots.filter((item) => [item.address, item.first_seen, item.last_seen, ...item.times].some((value) => String(value || "").toLowerCase().includes(query)))
+      : hotspots;
+    $("hourHotspotContent").innerHTML = filtered.length
+      ? filtered.slice(0, 20).map((item) => hotspotItemHtml(item)).join("")
       : `<p class="muted">尚無符合資料。</p>`;
+    $("hourHotspotContent").querySelectorAll("[data-hotspot-address]").forEach((button) => {
+      const toggle = () => {
+        const key = button.dataset.hotspotAddress || "";
+        state.expandedHotspotAddress = state.expandedHotspotAddress === key ? "" : key;
+        renderHourHotspots(filteredHourRecords());
+      };
+      button.addEventListener("click", toggle);
+      button.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          toggle();
+        }
+      });
+    });
+  }
+
+  function hotspotItemHtml(item) {
+    const expanded = state.expandedHotspotAddress === item.key;
+    const times = expanded
+      ? `<ol class="hotspot-times">${item.times.map((time) => `<li>${escapeHtml(time)}</li>`).join("")}</ol>`
+      : "";
+    return `<div class="hotspot-item ${expanded ? "expanded" : ""}" data-hotspot-address="${escapeHtml(item.key)}" role="button" tabindex="0">
+      <strong>${escapeHtml(item.address)}</strong>
+      <span>${item.count} 筆 / ${formatPercent(item.percent)}</span>
+      <small>${escapeHtml(item.first_seen || "-")} 至 ${escapeHtml(item.last_seen || "-")}</small>
+      ${times}
+    </div>`;
   }
 
   function setSubmissionDefaults() {
@@ -407,6 +526,7 @@
       exported_at: new Date().toISOString(),
       phoneStatsRankMode: state.phoneStatsRankMode,
       hourSelection: Array.from(state.hourSelection).sort((a, b) => a - b),
+      phoneNotes: state.phoneNotes,
     };
     downloadText(`phone-settings-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
     $("exportMessage").textContent = "已匯出本機設定。";
@@ -423,6 +543,11 @@
         state.appliedHourSelection = new Set(state.hourSelection);
         renderHourTiles();
         applyHourSelection();
+      }
+      if (payload.phoneNotes && typeof payload.phoneNotes === "object") {
+        state.phoneNotes = normalizePhoneNotes(payload.phoneNotes);
+        persistPhoneNotes();
+        renderStatsView();
       }
       $("exportMessage").textContent = "已匯入本機設定。";
     } catch (error) {
@@ -1203,6 +1328,7 @@
     const station = stationFromCompound(value);
     if (!station) return;
     const key = stationKey(station);
+    station.station_key = key;
     stationMap.set(key, station);
     record.base_refs.push({ role, station_key: key });
   }
@@ -1211,6 +1337,7 @@
     const station = stationFromParts(cellId, address);
     if (!station) return;
     const key = stationKey(station);
+    station.station_key = key;
     stationMap.set(key, station);
     record.base_refs.push({ role, station_key: key });
   }
@@ -1367,6 +1494,46 @@
     return buckets;
   }
 
+  function computeAddressHotspots(records, stations) {
+    const stationMap = new Map();
+    (stations || []).forEach((station) => {
+      stationMap.set(station.station_key || stationKey(station), station);
+    });
+    const groups = new Map();
+    (records || []).forEach((record) => {
+      const seenInRecord = new Set();
+      (record.base_refs || []).forEach((ref) => {
+        const station = stationMap.get(ref.station_key);
+        if (!station || station.is_virtual) return;
+        const address = cellText(station.address);
+        const normalized = station.normalized_address || normalizeAddress(address);
+        if (!address || !normalized || seenInRecord.has(normalized)) return;
+        seenInRecord.add(normalized);
+        const group = groups.get(normalized) || {
+          key: normalized,
+          address,
+          normalized_address: normalized,
+          count: 0,
+          percent: 0,
+          times: [],
+          first_seen: "",
+          last_seen: "",
+        };
+        group.count += 1;
+        if (record.occurred_at) group.times.push(record.occurred_at);
+        groups.set(normalized, group);
+      });
+    });
+    const total = Math.max(1, (records || []).length);
+    return Array.from(groups.values()).map((group) => {
+      group.times.sort();
+      group.first_seen = group.times[0] || "";
+      group.last_seen = group.times[group.times.length - 1] || "";
+      group.percent = (group.count / total) * 100;
+      return group;
+    }).sort((a, b) => b.count - a.count || a.address.localeCompare(b.address, "zh-Hant", { numeric: true }));
+  }
+
   function hourFromIso(value) {
     const match = cellText(value).match(/T(\d{2}):/);
     return match ? Number(match[1]) : -1;
@@ -1467,7 +1634,10 @@
     parseImportFile,
     computePhoneStats,
     computeHourBuckets,
+    computeAddressHotspots,
     buildSubmissionCsv,
     normalizePhoneText,
+    tellowsUrl,
+    hourButtonLabel,
   };
 });
