@@ -13,6 +13,9 @@
     hourSelection: "phone-workbench-hour-selection",
     phoneNotes: "phone-workbench-phone-notes-v1",
     callColumnWidths: "phone-workbench-call-column-widths-v1",
+    theme: "phone-workbench-theme",
+    sidebarCollapsed: "phone-workbench-sidebar-collapsed",
+    noticeDismissed: "phone-workbench-notice-dismissed",
   };
   const LOCAL_EXPORT_VERSION = "phone-workbench-local-settings-v1";
   const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}-${String(hour + 1).padStart(2, "0")}`);
@@ -58,6 +61,9 @@
     expandedHotspotAddress: "",
     phoneNotes: {},
     callColumnWidths: {},
+    theme: "light",
+    sidebarCollapsed: false,
+    noticeDismissed: false,
     activeColumnResize: null,
   };
 
@@ -67,11 +73,14 @@
 
   function init() {
     restoreSettings();
+    syncTheme();
+    syncSidebarCollapsed();
     bindEvents();
     setSubmissionDefaults();
     renderHourTiles();
     renderAllViews();
     initCallColumnResize();
+    maybeShowUsageNotice();
   }
 
   function $(id) {
@@ -118,8 +127,92 @@
     $("importWorkspaceInput")?.addEventListener("change", importWorkspaceJson);
     $("exportLocalSettingsButton")?.addEventListener("click", exportLocalSettings);
     $("importLocalSettingsInput")?.addEventListener("change", importLocalSettings);
+    $("sidebarCollapseButton")?.addEventListener("click", toggleSidebarCollapsed);
+    $("themeToggleButton")?.addEventListener("click", toggleTheme);
+    $("openNoticeButton")?.addEventListener("click", () => showUsageNotice());
+    $("noticeDismissButton")?.addEventListener("click", () => hideUsageNotice(true));
+    $("supportTypesButton")?.addEventListener("click", toggleSupportFileTypes);
+    $("oneClickUpdateButton")?.addEventListener("click", runOneClickUpdate);
+    $("usageNoticeModal")?.addEventListener("click", (event) => {
+      if (event.target === $("usageNoticeModal")) hideUsageNotice(true);
+    });
     document.addEventListener("pointermove", handleCallColumnResizeMove);
     document.addEventListener("pointerup", handleCallColumnResizeEnd);
+  }
+
+  function syncTheme() {
+    if (typeof document === "undefined") return;
+    document.body.dataset.theme = state.theme;
+    const button = $("themeToggleButton");
+    if (button) {
+      const dark = state.theme === "dark";
+      button.setAttribute("aria-pressed", dark ? "true" : "false");
+      button.title = dark ? "切換淺色模式" : "深色模式";
+      const label = button.querySelector(".tool-label");
+      if (label) label.textContent = dark ? "淺色模式" : "深色模式";
+    }
+  }
+
+  function toggleTheme() {
+    state.theme = state.theme === "dark" ? "light" : "dark";
+    localStorage.setItem(STORAGE_KEYS.theme, state.theme);
+    syncTheme();
+  }
+
+  function syncSidebarCollapsed() {
+    if (typeof document === "undefined") return;
+    document.body.classList.toggle("sidebar-collapsed", state.sidebarCollapsed);
+    const button = $("sidebarCollapseButton");
+    if (button) {
+      button.setAttribute("aria-pressed", state.sidebarCollapsed ? "true" : "false");
+      button.title = state.sidebarCollapsed ? "展開側邊欄" : "縮放側邊欄";
+    }
+  }
+
+  function toggleSidebarCollapsed() {
+    state.sidebarCollapsed = !state.sidebarCollapsed;
+    localStorage.setItem(STORAGE_KEYS.sidebarCollapsed, state.sidebarCollapsed ? "true" : "false");
+    syncSidebarCollapsed();
+  }
+
+  function maybeShowUsageNotice() {
+    if (!state.noticeDismissed) showUsageNotice();
+  }
+
+  function showUsageNotice() {
+    const modal = $("usageNoticeModal");
+    if (!modal) return;
+    modal.hidden = false;
+    $("noticeDismissButton")?.focus();
+  }
+
+  function hideUsageNotice(persist) {
+    const modal = $("usageNoticeModal");
+    if (modal) modal.hidden = true;
+    if (persist) {
+      state.noticeDismissed = true;
+      localStorage.setItem(STORAGE_KEYS.noticeDismissed, "true");
+    }
+  }
+
+  function toggleSupportFileTypes() {
+    const panel = $("supportTypesPanel");
+    const button = $("supportTypesButton");
+    if (!panel) return;
+    panel.hidden = !panel.hidden;
+    if (button) button.textContent = panel.hidden ? "顯示支援檔案類型" : "隱藏支援檔案類型";
+  }
+
+  function runOneClickUpdate() {
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch (_error) {
+      // Some privacy modes can block storage clearing; reload still helps fetch fresh assets.
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set("refresh", String(Date.now()));
+    window.location.replace(url.toString());
   }
 
   function setView(view) {
@@ -139,6 +232,9 @@
     state.phoneStatsRankMode = localStorage.getItem(STORAGE_KEYS.statsRankMode) === "seconds" ? "seconds" : "count";
     state.phoneNotes = normalizePhoneNotes(readJson(localStorage.getItem(STORAGE_KEYS.phoneNotes), {}));
     state.callColumnWidths = normalizeColumnWidths(readJson(localStorage.getItem(STORAGE_KEYS.callColumnWidths), {}));
+    state.theme = localStorage.getItem(STORAGE_KEYS.theme) === "dark" ? "dark" : "light";
+    state.sidebarCollapsed = localStorage.getItem(STORAGE_KEYS.sidebarCollapsed) === "true";
+    state.noticeDismissed = localStorage.getItem(STORAGE_KEYS.noticeDismissed) === "true";
     const storedHours = readJson(localStorage.getItem(STORAGE_KEYS.hourSelection), null);
     if (Array.isArray(storedHours)) {
       state.hourSelection = new Set(storedHours.map(Number).filter((hour) => hour >= 0 && hour <= 23));
@@ -664,6 +760,9 @@
       hourSelection: Array.from(state.hourSelection).sort((a, b) => a - b),
       phoneNotes: state.phoneNotes,
       callColumnWidths: state.callColumnWidths,
+      theme: state.theme,
+      sidebarCollapsed: state.sidebarCollapsed,
+      noticeDismissed: state.noticeDismissed,
     };
     downloadText(`phone-settings-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
     $("exportMessage").textContent = "已匯出本機設定。";
@@ -691,6 +790,20 @@
         state.callColumnWidths = normalizeColumnWidths(payload.callColumnWidths);
         persistCallColumnWidths();
         applyCallColumnWidths();
+      }
+      if (payload.theme === "dark" || payload.theme === "light") {
+        state.theme = payload.theme;
+        localStorage.setItem(STORAGE_KEYS.theme, state.theme);
+        syncTheme();
+      }
+      if (typeof payload.sidebarCollapsed === "boolean") {
+        state.sidebarCollapsed = payload.sidebarCollapsed;
+        localStorage.setItem(STORAGE_KEYS.sidebarCollapsed, state.sidebarCollapsed ? "true" : "false");
+        syncSidebarCollapsed();
+      }
+      if (typeof payload.noticeDismissed === "boolean") {
+        state.noticeDismissed = payload.noticeDismissed;
+        localStorage.setItem(STORAGE_KEYS.noticeDismissed, state.noticeDismissed ? "true" : "false");
       }
       $("exportMessage").textContent = "已匯入本機設定。";
     } catch (error) {
