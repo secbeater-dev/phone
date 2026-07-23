@@ -48,6 +48,7 @@
   const COMPACT_HEADERS = ["時間", "通話秒數", "調閱號碼", "IMEI", "通話類別", "基地台", "迄基地台"];
   const FET_WEB_HEADERS = ["啟始時間", "通聯時間(秒)", "結束時間", "上行用量", "下行用量", "全部用量", "基地台 ID", "最終基地台 ID", "基地台位址", "最終基地台位址", "上網IPv4", "上網IPv6", "IMEI", "IMSI", "MSISDN", "備註"];
   const TWM_CALL_PIG_HEADERS = ["通話類別", "始話時間", "調閱門號", "對象門號", "通話期間", "開始基地台編號", "開始基地台"];
+  const CHT_PROSECUTOR_HEADERS = ["CDR類別", "主叫號碼", "查詢狀態", "受叫號碼", "始話日期時間", "通話秒數", "IMEI", "指定轉接", "起始基地台-地址/終止基地台-地址"];
 
   const state = {
     view: "hours",
@@ -368,7 +369,7 @@
   function callPhoneLink(phone) {
     const normalized = normalizePhoneText(phone);
     if (!normalized) return "";
-    return `<a class="phone-link" href="${tellowsUrl(normalized)}" title="點我查詢" target="_blank" rel="noopener noreferrer">${escapeHtml(normalized)}</a>`;
+    return `<span class="phone-value">${escapeHtml(normalized)}</span>`;
   }
 
   function callPhoneNoteInput(phone, label) {
@@ -566,7 +567,7 @@
             <div class="stats-table-row stats-table-head" role="row"><span>#</span><span>電話</span><span>備註(只存瀏覽器)</span><span>次數</span><span>秒數</span></div>
             ${rows.slice(0, 20).map((row, index) => `<div class="stats-table-row" role="row">
               <span>${index + 1}</span>
-              <span><a class="phone-link" href="${tellowsUrl(row.phone)}" title="點我查詢" target="_blank" rel="noopener noreferrer">${escapeHtml(row.phone)}</a></span>
+              <span><span class="phone-value">${escapeHtml(row.phone)}</span></span>
               <span><input class="phone-note-input" data-phone-note="${escapeHtml(row.phone)}" value="${escapeHtml(phoneNote(row.phone))}" aria-label="備註(只存瀏覽器) ${escapeHtml(row.phone)}" /></span>
               <span>${row.count}</span>
               <span>${row.seconds}</span>
@@ -907,6 +908,8 @@
       rows: XLSX.utils.sheet_to_json(workbook.Sheets[title], { header: 1, defval: "", raw: false, blankrows: false })
         .map((values, index) => ({ rowNumber: index + 1, values: values.map(cellText) })),
     }));
+    const chtProsecutor = chtProsecutorHeaders(sheets);
+    if (chtProsecutor) return parseChtProsecutor(fileName, sheets, chtProsecutor);
     const converted = convertedMultiSheetHeaders(sheets);
     if (converted) return parseConvertedMultiSheet(fileName, sheets, converted);
     const twmCallPig = twmCallPigHeaders(sheets);
@@ -923,6 +926,72 @@
     if (detected.sourceFormat === "taiwan_mobile_call") return parseTwm(fileName, sheet.title, sheet.rows, detected);
     if (detected.sourceFormat === "taiwan_mobile_data_session") return parseTwmDataSession(fileName, sheet.title, sheet.rows, detected);
     throw new Error("找不到支援的標題列");
+  }
+
+  function parseChtProsecutor(fileName, sheets, header) {
+    const subject = metadataBefore(header.sheet.rows, header.rowNumber);
+    const queryPhone = normalizePhoneText(subject["電話號碼"] || subject["設備號碼"]);
+    const parsed = makeParsed({
+      fileName,
+      carrier: "中華電信",
+      sourceFormat: "chunghwa_prosecutor_cdr_xlsx",
+      sheetName: header.sheet.title,
+      headerRow: header.rowNumber,
+      totalSourceRows: sheets.reduce((sum, sheet) => sum + sheet.rows.length, 0),
+      subject,
+    });
+    const stationMap = new Map();
+    forRowsAfter(header, (rowNumber, data) => {
+      const rawCallType = cellText(data["CDR類別"]);
+      const rawOccurredAt = cellText(data["始話日期時間"]);
+      const caller = normalizePhoneText(data["主叫號碼"]);
+      const callee = normalizePhoneText(data["受叫號碼"]);
+      if (!rawCallType && !rawOccurredAt && !caller && !callee) return;
+      if (canonicalHeaderText(rawCallType) === "CDR類別") return;
+
+      const occurredAt = normalizeDatetime(rawOccurredAt);
+      if (rawOccurredAt && !occurredAt) parsed.warnings.push(`第 ${rowNumber} 列的始話日期時間無法正規化，已保留原文。`);
+
+      const rawDirection = directionLabel(rawCallType);
+      let direction = rawDirection;
+      let targetPhone = "";
+      let counterpartyPhone = "";
+      if (queryPhone && caller === queryPhone && callee !== queryPhone) {
+        direction = "outbound";
+        targetPhone = queryPhone;
+        counterpartyPhone = callee;
+      } else if (queryPhone && callee === queryPhone && caller !== queryPhone) {
+        direction = "inbound";
+        targetPhone = queryPhone;
+        counterpartyPhone = caller;
+      } else if (rawDirection === "inbound") {
+        targetPhone = callee || queryPhone || caller;
+        counterpartyPhone = caller && caller !== targetPhone ? caller : "";
+      } else {
+        targetPhone = caller || queryPhone || callee;
+        counterpartyPhone = callee && callee !== targetPhone ? callee : "";
+      }
+
+      const note = [
+        cellText(data["查詢狀態"]) ? `查詢狀態：${cellText(data["查詢狀態"])}` : "",
+        cellText(data["指定轉接"]) ? `指定轉接：${cellText(data["指定轉接"])}` : "",
+      ].filter(Boolean).join("；");
+      const record = baseRecord({
+        row_number: rowNumber,
+        call_type: rawCallType,
+        direction,
+        occurred_at: occurredAt || rawOccurredAt,
+        duration_seconds: toInt(data["通話秒數"]),
+        target_phone: targetPhone,
+        counterparty_phone: counterpartyPhone,
+        imei: cellText(data["IMEI"]),
+        note,
+      });
+      addChtStationRefs(record, stationMap, data["起始基地台-地址/終止基地台-地址"]);
+      parsed.records.push(record);
+    });
+    parsed.base_stations = Array.from(stationMap.values());
+    return parsed;
   }
 
   function parseXmlWorkbook(fileName, xml) {
@@ -977,7 +1046,7 @@
       ended_at: record.ended_at || "",
       duration_seconds: toInt(record.duration_seconds),
       call_type: record.call_type || "",
-      direction: directionLabel(record.call_type),
+      direction: normalizeDirection(record.direction, record.call_type),
       target_phone: target,
       counterparty_phone: counterparty,
       imei: record.imei || "",
@@ -1385,6 +1454,7 @@
     return {
       row_number: values.row_number,
       call_type: values.call_type || "",
+      direction: values.direction || "",
       occurred_at: values.occurred_at || "",
       ended_at: values.ended_at || "",
       duration_seconds: values.duration_seconds ?? null,
@@ -1432,6 +1502,22 @@
       if (hasHeaders(row.values, required)) return { sheet, rowNumber: row.rowNumber, headers: row.values };
     }
     return null;
+  }
+
+  function chtProsecutorHeaders(sheets) {
+    for (const sheet of sheets) {
+      for (const row of sheet.rows.slice(0, 80)) {
+        const headers = row.values.map(canonicalHeaderText);
+        if (hasHeaders(headers, CHT_PROSECUTOR_HEADERS)) {
+          return { sheet, rowNumber: row.rowNumber, headers };
+        }
+      }
+    }
+    return null;
+  }
+
+  function canonicalHeaderText(value) {
+    return cellText(value).replace(/\s+/g, "");
   }
 
   function imeiLookupHeaders(sheets) {
@@ -1675,6 +1761,33 @@
     record.base_refs.push({ role, station_key: key });
   }
 
+  function addChtStationRefs(record, stationMap, value) {
+    const text = cellText(value);
+    if (!text) return;
+    const separator = text.indexOf("/");
+    if (separator < 0) {
+      addChtStationEndpoint(record, stationMap, "primary", text);
+      return;
+    }
+    addChtStationEndpoint(record, stationMap, "start", text.slice(0, separator));
+    addChtStationEndpoint(record, stationMap, "end", text.slice(separator + 1));
+  }
+
+  function addChtStationEndpoint(record, stationMap, role, value) {
+    const text = cellText(value);
+    if (!text) return;
+    if (isVirtualStationText(text)) {
+      addStationRef(record, stationMap, role, "VOWIFI", text);
+      return;
+    }
+    const match = text.match(/^([^-]+)-(.*)$/);
+    if (match) {
+      addStationRef(record, stationMap, role, cleanCellId(match[1]), match[2]);
+      return;
+    }
+    addStationCompoundRef(record, stationMap, role, text);
+  }
+
   function stationFromCompound(value) {
     const text = cellText(value);
     if (!text || text.startsWith("路由:")) return null;
@@ -1777,10 +1890,16 @@
 
   function directionLabel(callType) {
     const text = cellText(callType);
-    if (text.includes("受") || text.includes("收")) return "inbound";
+    if (text.includes("受") || text.includes("收") || text.includes("進")) return "inbound";
     if (text.includes("發") || text.includes("撥") || text.includes("去")) return "outbound";
     if (text.includes("數據") || text.includes("上網")) return "data";
     return "other";
+  }
+
+  function normalizeDirection(value, fallback) {
+    const direct = cellText(value).toLowerCase();
+    if (["inbound", "outbound", "data", "other"].includes(direct)) return direct;
+    return directionLabel(fallback || value);
   }
 
   function computePhoneStats(records, mode = "count") {
@@ -1789,7 +1908,7 @@
     const total = new Map();
     records.forEach((record) => {
       const seconds = Number(record.duration_seconds || 0);
-      const direction = directionLabel(record.call_type || record.direction);
+      const direction = normalizeDirection(record.direction, record.call_type);
       if (record.counterparty_phone) addPhoneStat(total, record.counterparty_phone, "對象", seconds);
       if (record.target_phone) addPhoneStat(total, record.target_phone, "目標", seconds);
       if (direction === "inbound" && record.counterparty_phone) addPhoneStat(inbound, record.counterparty_phone, "來電/收訊", seconds);

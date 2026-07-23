@@ -439,14 +439,11 @@ body[data-theme="dark"] .segmented-button { background: var(--primary-action); c
 .stats-table-row:last-child { border-bottom: 0; }
 .stats-table-head { background: #f1f3f6; font-weight: 700; }
 body[data-theme="dark"] .stats-table-head { background: #262626; }
-.phone-link {
+.phone-value {
   color: #111;
   font-weight: 700;
-  text-decoration: underline;
-  text-underline-offset: 3px;
 }
-body[data-theme="dark"] .phone-link { color: #f5f5f4; }
-.phone-link:hover { color: var(--accent-strong); }
+body[data-theme="dark"] .phone-value { color: #f5f5f4; }
 .phone-note-input {
   width: 100%;
   min-width: 0;

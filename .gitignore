@@ -1,0 +1,19 @@
+# Real CDR and spreadsheet sources must never enter this public repository.
+*.xlsx
+*.xls
+*.xml
+*.csv
+*.tsv
+
+# Local-only fixtures and user exports.
+private-data/
+private-fixtures/
+local-data/
+phone-workspace-*.json
+phone-local-settings-*.json
+phone-submission-*.csv
+
+# Generated deployment and local tooling output.
+_site/
+coverage/
+*.log

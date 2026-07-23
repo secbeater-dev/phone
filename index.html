@@ -3,16 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha384-KxTQhJ4PSplGXtuombYakDpnHoXsNNh8wnk456xVdrKipiN4QP+x9+YcYuVUswkA' 'sha384-/XFIgGDUpr6FNWP+aHhiZNuOQeCDgfzmOUrZ2/y+VGqgtLM7zNmaMJru+r4emEAo'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'; media-src 'none'; manifest-src 'none'" />
     <title>通聯資料分析工具</title>
     <link rel="icon" type="image/png" href="./assets/Beater_icon.png" />
     <link rel="stylesheet" href="./styles.css" />
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-ZLC22P344B"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-ZLC22P344B');
-    </script>
   </head>
   <body>
     <div class="app-shell">
@@ -215,6 +210,7 @@
             <ul>
               <li>遠傳雙向通聯 XLSX</li>
               <li>遠傳行動上網 / 複製貼上 XLSX</li>
+              <li>中華電信地檢通聯 XLSX</li>
               <li>台哥大雙向通聯 XML</li>
               <li>台哥大雙向通聯豬改 XLSX</li>
               <li>台哥大網路歷程 XML</li>
@@ -234,7 +230,7 @@
         </aside>
       </div>
     </section>
-    <script src="./vendor/xlsx.full.min.js"></script>
-    <script src="./app.js"></script>
+    <script src="./vendor/xlsx.full.min.js" integrity="sha384-KxTQhJ4PSplGXtuombYakDpnHoXsNNh8wnk456xVdrKipiN4QP+x9+YcYuVUswkA" crossorigin="anonymous"></script>
+    <script src="./app.js" integrity="sha384-/XFIgGDUpr6FNWP+aHhiZNuOQeCDgfzmOUrZ2/y+VGqgtLM7zNmaMJru+r4emEAo" crossorigin="anonymous"></script>
   </body>
 </html>

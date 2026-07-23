@@ -23,12 +23,33 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Reject tracked sensitive data
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -Eiq '\.(xlsx|xls|xml|csv|tsv)$|(^|/)(private-data|private-fixtures|local-data)(/|$)|phone-(workspace|local-settings)-.*\.json$'; then
+            echo "Sensitive data file pattern detected in the Git index."
+            exit 1
+          fi
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test
+        run: node --test tests/app.test.js
+      - name: Prepare public artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp .nojekyll 404.html admin.html app.js index.html styles.css _site/
+          cp -R assets vendor _site/
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: "."
+          path: "./_site"
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
