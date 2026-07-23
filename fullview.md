@@ -13,6 +13,7 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 ```text
 .
 ├─ .github/workflows/pages.yml  # 測試、敏感檔拒絕、白名單 Pages 部署
+├─ .gitattributes               # 固定網頁文字資產為 LF，確保 SRI 可重現
 ├─ .gitignore                   # 排除通聯檔與本機匯出物
 ├─ .nojekyll                    # 停用 Jekyll
 ├─ AGENTS.md                    # 維護與個資規則
@@ -166,3 +167,4 @@ XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版�
 
 - 2026-07-23：依未修改的 `main`（commit `13485b4`）建立基準架構文件。
 - 2026-07-23：新增中華電信地檢新版 XLSX parser、明確方向統計、日期警告及雙基地台解析；移除 Google Analytics/Tellows，加入 CSP/SRI、忽略規則、合成/私密隔離測試與 Pages 白名單部署。
+- 2026-07-23：固定網頁文字資產為 LF，讓 Windows、GitHub Actions 與 Pages 使用相同位元組並維持 SRI 驗證一致。
