@@ -565,7 +565,7 @@
       rows.length
         ? `<div class="stats-table" role="table">
             <div class="stats-table-row stats-table-head" role="row"><span>#</span><span>電話</span><span>備註(只存瀏覽器)</span><span>次數</span><span>秒數</span></div>
-            ${rows.slice(0, 20).map((row, index) => `<div class="stats-table-row" role="row">
+            ${rows.map((row, index) => `<div class="stats-table-row" role="row">
               <span>${index + 1}</span>
               <span><span class="phone-value">${escapeHtml(row.phone)}</span></span>
               <span><input class="phone-note-input" data-phone-note="${escapeHtml(row.phone)}" value="${escapeHtml(phoneNote(row.phone))}" aria-label="備註(只存瀏覽器) ${escapeHtml(row.phone)}" /></span>

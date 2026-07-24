@@ -115,7 +115,7 @@ XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版�
 
 - `renderTwoWayCalls`：通聯搜尋、排序、欄寬、備註與最多 5,000 筆顯示。
 - `renderProfileView`：案件摘要、subject 與 IMEI 清單。
-- `renderStatsView`：依明確或衍生方向統計來電、去電及完整排行。
+- `renderStatsView`：依明確或衍生方向統計來電、去電及完整排行；三種排行均顯示全部電話，不截斷前 20 名。
 - `renderHoursView`：24 小時分布、時段篩選及基地台熱點。
 - `renderSubmissionPreview`：電話驗證、去重、投單預覽與 CSV。
 - `renderExportView`：workspace JSON 與本機設定匯出。
@@ -139,7 +139,7 @@ XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版�
 
 ## 10. 測試
 
-`node --test tests/app.test.js` 使用記憶體內合成 XLSX，涵蓋：空白標題、用戶資料、主叫/受叫/進來 CDR、調閱門號不在該列、無效日期、IMEI、指定轉接與雙基地台；另有既有台灣大哥大解析及電話方向統計回歸測試，並驗證 HTML 無 Google/Tellows 且 SRI 與檔案雜湊一致。
+`node --test tests/app.test.js` 使用記憶體內合成 XLSX，涵蓋：空白標題、用戶資料、主叫/受叫/進來 CDR、調閱門號不在該列、無效日期、IMEI、指定轉接與雙基地台；另有既有台灣大哥大解析、電話方向及超過 20 支電話仍完整保留的排行回歸測試，並驗證 HTML 無 Google/Tellows 且 SRI 與檔案雜湊一致。
 
 設定 `PRIVATE_CDR_XLSX` 時會啟用 repository 外真實檔整合測試，只斷言格式、有效來源列數相等與方向合法，不輸出資料內容。瀏覽器煙霧測試也只使用合成 XLSX，檢查六個 view、純文字電話與零第三方資產。
 
@@ -168,3 +168,4 @@ XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版�
 - 2026-07-23：依未修改的 `main`（commit `13485b4`）建立基準架構文件。
 - 2026-07-23：新增中華電信地檢新版 XLSX parser、明確方向統計、日期警告及雙基地台解析；移除 Google Analytics/Tellows，加入 CSP/SRI、忽略規則、合成/私密隔離測試與 Pages 白名單部署。
 - 2026-07-23：固定網頁文字資產為 LF，讓 Windows、GitHub Actions 與 Pages 使用相同位元組並維持 SRI 驗證一致。
+- 2026-07-24：移除電話統計各分類前 20 名顯示上限，來電、去電與全部電話皆顯示完整排行。

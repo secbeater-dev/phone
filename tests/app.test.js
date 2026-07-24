@@ -75,6 +75,21 @@ test("explicit direction overrides raw call type in phone statistics", () => {
   assert.deepEqual(stats.outboundRows.map((row) => row.phone), ["0900000003"]);
 });
 
+test("phone statistics preserve every ranked phone beyond the former top 20 limit", () => {
+  const records = Array.from({ length: 25 }, (_, index) => ({
+    call_type: "發話",
+    direction: "outbound",
+    target_phone: "0900000000",
+    counterparty_phone: `0911${String(index).padStart(6, "0")}`,
+    duration_seconds: index + 1,
+  }));
+  const stats = PhoneWorkbench.computePhoneStats(records);
+  assert.equal(stats.outboundRows.length, 25);
+  assert.equal(stats.totalRows.filter((row) => row.phone !== "0900000000").length, 25);
+  const source = fs.readFileSync(path.resolve(__dirname, "..", "app.js"), "utf8");
+  assert.doesNotMatch(source, /rows\.slice\(0,\s*20\)\.map/);
+});
+
 test("keeps the existing Taiwan Mobile parser behavior", () => {
   const rows = [
     ["通話類別", "目標電話", "對象電話", "始話日期時間", "通話時間(秒)", "基地台編號1/位置1"],
