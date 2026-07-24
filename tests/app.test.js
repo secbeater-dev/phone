@@ -106,6 +106,8 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
   assert.doesNotMatch(html, /googletagmanager|gtag\s*\(/i);
   assert.doesNotMatch(html, /tellows\.tw/i);
+  assert.match(html, /今日重點（2026-07-24）/);
+  assert.match(html, /不再只顯示前 20 名/);
 
   for (const relativePath of ["vendor/xlsx.full.min.js", "app.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));

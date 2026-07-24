@@ -33,7 +33,7 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 
 ## 3. 載入順序
 
-1. `index.html` 建立側欄、六個 view、匯入控制與使用提醒。
+1. `index.html` 建立側欄、六個 view、匯入控制與使用提醒；提醒中的「今日重點」列出目前發布的使用者可見更新。
 2. 瀏覽器驗證 `vendor/xlsx.full.min.js` 與 `app.js` 的 SHA-384 SRI 後依序執行；CSP 不允許其他 script。
 3. `app.js` 以 UMD 包裝：瀏覽器掛載 `window.PhoneWorkbench`；Node CommonJS 載入本地 SheetJS 並輸出測試介面。
 4. `DOMContentLoaded` 執行 `init()`，還原偏好、綁定事件並渲染所有 view。
@@ -169,3 +169,4 @@ XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版�
 - 2026-07-23：新增中華電信地檢新版 XLSX parser、明確方向統計、日期警告及雙基地台解析；移除 Google Analytics/Tellows，加入 CSP/SRI、忽略規則、合成/私密隔離測試與 Pages 白名單部署。
 - 2026-07-23：固定網頁文字資產為 LF，讓 Windows、GitHub Actions 與 Pages 使用相同位元組並維持 SRI 驗證一致。
 - 2026-07-24：移除電話統計各分類前 20 名顯示上限，來電、去電與全部電話皆顯示完整排行。
+- 2026-07-24：更新使用提醒的「今日重點」，公告電話統計已改為顯示全部排行。
