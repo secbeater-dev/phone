@@ -41,8 +41,8 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 ## 3. 載入順序
 
 1. `index.html` 建立側欄、六個 view、匯入控制、附卷匯出視窗與使用提醒；提醒中的「今日重點」列出目前發布的使用者可見更新，Gemini 區塊使用原生 `details` 顯示家庭分享教學。
-2. 瀏覽器驗證 `vendor/xlsx.full.min.js`、`attachment-export.js` 與 `app.js` 的 SHA-384 SRI 後依序執行；CSP 不允許其他 script。
-3. `app.js` 與 `attachment-export.js` 均以 UMD 包裝，可供瀏覽器及 Node 測試使用。只有使用者按下附卷下載時，`app.js` 才以固定路徑與 SRI 延遲載入 ExcelJS，或依序載入 pdf-lib、fontkit 與字型資料。
+2. 瀏覽器透過固定發布版本查詢字串載入 `vendor/xlsx.full.min.js`、`attachment-export.js` 與 `app.js`，驗證 SHA-384 SRI 後依序執行；版本字串避免舊快取與新 SRI 衝突，CSP 不允許其他 script。
+3. `app.js` 與 `attachment-export.js` 均以 UMD 包裝，可供瀏覽器及 Node 測試使用。只有使用者按下附卷下載時，`app.js` 才以固定版本路徑與 SRI 延遲載入 ExcelJS，或依序載入 pdf-lib、fontkit 與字型資料。
 4. `DOMContentLoaded` 執行 `init()`，還原偏好、綁定事件並渲染所有 view。
 
 ## 4. 狀態模型
@@ -158,7 +158,7 @@ XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版�
 ## 9. 隱私與信任邊界
 
 - 三個 HTML 都設定 `no-referrer`；已移除 Google Analytics。
-- `index.html` 的 CSP 將 `connect-src`、`object-src`、`form-action`、`frame-src`、`worker-src`、`media-src` 與 `manifest-src` 設為 `none`，圖片與字型限同源/data，script 只允許對應目前位元組的 SHA-384；靜態入口與四個延遲載入匯出資產都同時受 CSP hash 與 SRI 保護。`style-src-attr` 只為既有圖表高度與可調欄寬保留 inline CSS。
+- `index.html` 的 CSP 將 `connect-src`、`object-src`、`form-action`、`frame-src`、`worker-src`、`media-src` 與 `manifest-src` 設為 `none`，圖片與字型限同源/data，script 只允許對應目前位元組的 SHA-384；靜態入口與四個延遲載入匯出資產都同時受 CSP hash、SRI 與固定版本查詢字串保護。`style-src-attr` 只為既有圖表高度與可調欄寬保留 inline CSS。
 - `404.html` 與 `admin.html` 使用 `script-src 'none'`。
 - 沒有 `fetch`、XHR、WebSocket、EventSource、Beacon、表單提交或檔案上傳路徑；匯出套件與字型皆從同源固定檔案載入，資料只在瀏覽器記憶體中交給 Blob。
 - 電話不再連往 Tellows；Cloudflare/其他注入 script 不在 CSP 許可清單內。
@@ -204,3 +204,4 @@ XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版�
 - 2026-07-26：更新今日重點、Gemini 價格與家庭分享教學；移除線上支援格式清單，改為作者 Telegram 聯絡連結，並更新左上角 Notion 連結。
 - 2026-07-26：修正同批多檔只留下最後一檔的問題，加入 workspace 合併、來源追蹤、subject/基地台去重、遠傳基地台續行附加與通聯列表 500 筆分頁。
 - 2026-07-26：新增側欄附卷匯出視窗、一份六分頁 XLSX、六份可搜尋文字 PDF、固定版本本地套件/中文字型與逐檔 Pages 發布白名單。
+- 2026-07-26：正式站驗證發現舊瀏覽器快取可能與新版 SRI 衝突，為靜態與延遲載入 script 加入固定發布版本查詢字串；CSP 雜湊限制維持不變。

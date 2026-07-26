@@ -281,7 +281,7 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   for (const relativePath of ["vendor/xlsx.full.min.js", "attachment-export.js", "app.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
-    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=20260726-attachment-v1"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
     assert.ok(html.includes(`'${sri}'`));
   }
   const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
@@ -289,7 +289,7 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
     assert.ok(html.includes(`'${sri}'`));
-    assert.ok(appSource.includes(`./${relativePath}`));
+    assert.ok(appSource.includes(`./${relativePath}?v=20260726-attachment-v1`));
     assert.ok(appSource.includes(sri));
   }
   assert.match(html, /connect-src 'none'/);
