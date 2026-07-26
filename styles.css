@@ -168,6 +168,10 @@ body[data-theme="dark"] .sidebar { background: rgba(23, 23, 23, 0.96); }
   border-color: var(--accent);
   outline: none;
 }
+.sidebar-tool-button.active {
+  border-color: var(--accent);
+  outline: 2px solid rgba(220, 38, 38, 0.18);
+}
 .tool-icon {
   display: grid;
   place-items: center;

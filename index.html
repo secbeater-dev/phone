@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT' 'sha384-0bvIQoA6vO2bPEvCiRUrXiHjHI1/87vg7486XIcual9H8Ay2Ws1btD2gvWOOD4ne' 'sha384-fG9Qi3HiZe1A6aqHJeWHiYRRM8DZumwDDaG3uG1Xn1Z9BTRW+i+uO1ucL1ZkVfAD' 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' 'sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn' 'sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'; media-src 'none'; manifest-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT' 'sha384-0bvIQoA6vO2bPEvCiRUrXiHjHI1/87vg7486XIcual9H8Ay2Ws1btD2gvWOOD4ne' 'sha384-uvQOwxZZ+cFFIVSXEou4SSr+RtvmXOQX/ZjL2D1IVUyvOcsNInDTB6JuSZiVExDa' 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' 'sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn' 'sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'; media-src 'none'; manifest-src 'none'" />
     <title>通聯資料分析工具</title>
     <link rel="icon" type="image/png" href="./assets/Beater_icon.png" />
     <link rel="stylesheet" href="./styles.css" />
@@ -25,7 +25,7 @@
           <button class="nav-item" data-view="profile" type="button"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 6h10M8 12h10M8 18h10"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg></span><strong>用戶資料</strong></button>
           <button class="nav-item" data-view="stats" type="button"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 19V9"/><path d="M12 19V5"/><path d="M19 19v-7"/><path d="M3 19h18"/></svg></span><strong>電話統計</strong></button>
           <button class="nav-item" data-view="submission" type="button"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h10l4 4v12H5V4Z"/><path d="M15 4v4h4M8 12h8M8 16h8M8 8h3"/></svg></span><strong>電話投單</strong></button>
-          <button class="nav-item" data-view="export" type="button"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></span><strong>資料匯出</strong></button>
+          <button id="attachmentExportButton" class="nav-item" type="button" title="附卷檔案匯出"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6V3Z"/><path d="M15 3v4h4M9 11h6M9 15h6M9 19h4"/></svg></span><strong>附卷檔案匯出</strong></button>
         </nav>
         <section class="sidebar-panel">
           <h3>資料匯入</h3>
@@ -35,9 +35,9 @@
           <div id="importResults" class="import-results"></div>
         </section>
         <section class="sidebar-tools" aria-label="工具">
-          <button id="attachmentExportButton" class="sidebar-tool-button" type="button" title="附卷檔案匯出">
-            <span class="tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6V3Z"/><path d="M15 3v4h4M9 11h6M9 15h6M9 19h4"/></svg></span>
-            <span class="tool-label">附卷檔案匯出</span>
+          <button id="dataExportViewButton" class="sidebar-tool-button" data-view="export" type="button" title="資料匯出">
+            <span class="tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></span>
+            <span class="tool-label">資料匯出</span>
           </button>
           <button id="sidebarCollapseButton" class="sidebar-tool-button" type="button" title="縮放側邊欄" aria-pressed="false">
             <span class="tool-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h10M4 19h16"/><path d="m18 9 3 3-3 3"/></svg></span>
@@ -239,6 +239,7 @@
             <ul class="notice-list">
               <li>修正多檔匯入覆蓋問題，最新遠傳 XLSX 會完整合併至通聯列表。</li>
               <li>新增附卷檔案匯出，可下載六分頁 XLSX 與六種可搜尋 PDF。</li>
+              <li>調整側欄入口：附卷檔案匯出移至主功能導覽，資料匯出移至下方工具區。</li>
             </ul>
           </section>
           <p class="notice-note">備註：一鍵更新會清除本機設定（所有資料），並強制重載最新版（等同 Ctrl+F5）。</p>
@@ -271,8 +272,8 @@
         </aside>
       </div>
     </section>
-    <script src="./vendor/xlsx.full.min.js?v=20260726-attachment-v1" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
-    <script src="./attachment-export.js?v=20260726-attachment-v1" integrity="sha384-0bvIQoA6vO2bPEvCiRUrXiHjHI1/87vg7486XIcual9H8Ay2Ws1btD2gvWOOD4ne" crossorigin="anonymous"></script>
-    <script src="./app.js?v=20260726-attachment-v1" integrity="sha384-fG9Qi3HiZe1A6aqHJeWHiYRRM8DZumwDDaG3uG1Xn1Z9BTRW+i+uO1ucL1ZkVfAD" crossorigin="anonymous"></script>
+    <script src="./vendor/xlsx.full.min.js?v=20260726-sidebar-swap-v1" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
+    <script src="./attachment-export.js?v=20260726-sidebar-swap-v1" integrity="sha384-0bvIQoA6vO2bPEvCiRUrXiHjHI1/87vg7486XIcual9H8Ay2Ws1btD2gvWOOD4ne" crossorigin="anonymous"></script>
+    <script src="./app.js?v=20260726-sidebar-swap-v1" integrity="sha384-uvQOwxZZ+cFFIVSXEou4SSr+RtvmXOQX/ZjL2D1IVUyvOcsNInDTB6JuSZiVExDa" crossorigin="anonymous"></script>
   </body>
 </html>

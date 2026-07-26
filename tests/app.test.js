@@ -266,10 +266,12 @@ test("keeps the existing Taiwan Mobile parser behavior", () => {
 test("HTML uses pinned local scripts and contains no analytics tag", () => {
   const root = path.resolve(__dirname, "..");
   const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  const styles = fs.readFileSync(path.join(root, "styles.css"), "utf8");
   assert.doesNotMatch(html, /googletagmanager|gtag\s*\(/i);
   assert.doesNotMatch(html, /tellows\.tw/i);
   assert.match(html, /今日重點（2026-07-26）/);
   assert.match(html, /附卷檔案匯出/);
+  assert.match(html, /調整側欄入口/);
   assert.match(html, /多檔匯入/);
   assert.match(html, /NT\$1,500/);
   assert.match(html, /家庭分享教學/);
@@ -281,7 +283,7 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   for (const relativePath of ["vendor/xlsx.full.min.js", "attachment-export.js", "app.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
-    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=20260726-attachment-v1"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=20260726-sidebar-swap-v1"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
     assert.ok(html.includes(`'${sri}'`));
   }
   const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
@@ -289,12 +291,20 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
     assert.ok(html.includes(`'${sri}'`));
-    assert.ok(appSource.includes(`./${relativePath}?v=20260726-attachment-v1`));
+    assert.ok(appSource.includes(`./${relativePath}?v=20260726-sidebar-swap-v1`));
     assert.ok(appSource.includes(sri));
   }
   assert.match(html, /connect-src 'none'/);
   assert.match(appSource, /CALL_PAGE_SIZE = 500/);
   assert.doesNotMatch(appSource, /rows\.slice\(0,\s*5000\)/);
+  const navigation = html.match(/<nav class="nav-list"[^>]*>([\s\S]*?)<\/nav>/)?.[1] || "";
+  const tools = html.match(/<section class="sidebar-tools"[^>]*>([\s\S]*?)<\/section>/)?.[1] || "";
+  assert.match(navigation, /id="attachmentExportButton" class="nav-item"/);
+  assert.doesNotMatch(navigation, /data-view="export"/);
+  assert.match(tools, /id="dataExportViewButton" class="sidebar-tool-button" data-view="export"/);
+  assert.doesNotMatch(tools, /id="attachmentExportButton"/);
+  assert.match(appSource, /querySelectorAll\("button\[data-view\]"\)/);
+  assert.match(styles, /\.sidebar-tool-button\.active\s*\{/);
 });
 
 test("Pages deploys attachment assets from an explicit file allowlist", () => {
