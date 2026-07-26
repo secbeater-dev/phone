@@ -19,10 +19,10 @@
   const LOCAL_EXPORT_VERSION = "phone-workbench-local-settings-v1";
   const CALL_PAGE_SIZE = 500;
   const ATTACHMENT_ASSETS = {
-    exceljs: { src: "./vendor/exceljs.min.js?v=20260726-sidebar-swap-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
-    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260726-sidebar-swap-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
-    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260726-sidebar-swap-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
-    fontData: { src: "./vendor/open-huninn-data.js?v=20260726-sidebar-swap-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
+    exceljs: { src: "./vendor/exceljs.min.js?v=20260726-notice-copy-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
+    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260726-notice-copy-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
+    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260726-notice-copy-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
+    fontData: { src: "./vendor/open-huninn-data.js?v=20260726-notice-copy-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
   };
   const loadedAttachmentAssets = new Map();
   const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}-${String(hour + 1).padStart(2, "0")}`);
@@ -940,7 +940,7 @@
       const chartDataUrl = createHourChartDataUrl(report.hours);
       const bytes = await AttachmentExport.createAttachmentXlsx(report, globalThis.ExcelJS, chartDataUrl);
       downloadBlob(`附卷檔案-${attachmentFileStamp()}.xlsx`, bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      setAttachmentExportStatus("XLSX 已下載。請依個資規範妥善保管。", false);
+      setAttachmentExportStatus("XLSX 已下載。", false);
     } catch (error) {
       setAttachmentExportStatus(`XLSX 產生失敗：${error.message}`, true);
     } finally {
@@ -962,7 +962,7 @@
       const fontBytes = base64ToBytes(globalThis.PhoneExportFontBase64);
       const bytes = await AttachmentExport.createAttachmentPdf(report, sectionKey, globalThis.PDFLib, globalThis.fontkit, fontBytes);
       downloadBlob(`附卷-${section.label}-${attachmentFileStamp()}.pdf`, bytes, "application/pdf");
-      setAttachmentExportStatus(`「${section.label}」PDF 已下載。請依個資規範妥善保管。`, false);
+      setAttachmentExportStatus(`「${section.label}」PDF 已下載。`, false);
     } catch (error) {
       setAttachmentExportStatus(`PDF 產生失敗：${error.message}`, true);
     } finally {

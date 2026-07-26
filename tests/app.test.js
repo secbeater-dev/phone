@@ -267,31 +267,36 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   const root = path.resolve(__dirname, "..");
   const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
   const styles = fs.readFileSync(path.join(root, "styles.css"), "utf8");
+  const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
   assert.doesNotMatch(html, /googletagmanager|gtag\s*\(/i);
   assert.doesNotMatch(html, /tellows\.tw/i);
   assert.match(html, /今日重點（2026-07-26）/);
   assert.match(html, /附卷檔案匯出/);
   assert.match(html, /調整側欄入口/);
-  assert.match(html, /多檔匯入/);
+  assert.match(html, /新增多檔案匯入功能/);
+  assert.doesNotMatch(html, /遠傳 XLSX/);
+  assert.doesNotMatch(html, /個資提醒|請依個資規範妥善保管/);
+  assert.doesNotMatch(appSource, /請依個資規範妥善保管/);
   assert.match(html, /NT\$1,500/);
   assert.match(html, /家庭分享教學/);
   assert.match(html, /https:\/\/families\.google\/intl\/zh-TW_ALL\/families\//);
   assert.match(html, /https:\/\/t\.me\/tg_secbeater/);
+  assert.match(html, /https:\/\/secbeater\.notion\.site\/3a939de98f3680188191d3ae931a2684/);
+  assert.match(html, /更多類型網站點此/);
   assert.match(html, /https:\/\/secbeater\.notion\.site\//);
   assert.doesNotMatch(html, /supportPasswordInput|SUPPORT_PASSWORD|目前支援檔案類型/);
 
   for (const relativePath of ["vendor/xlsx.full.min.js", "attachment-export.js", "app.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
-    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=20260726-sidebar-swap-v1"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=20260726-notice-copy-v1"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
     assert.ok(html.includes(`'${sri}'`));
   }
-  const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
   for (const relativePath of ["vendor/exceljs.min.js", "vendor/pdf-lib.min.js", "vendor/fontkit.umd.min.js", "vendor/open-huninn-data.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
     assert.ok(html.includes(`'${sri}'`));
-    assert.ok(appSource.includes(`./${relativePath}?v=20260726-sidebar-swap-v1`));
+    assert.ok(appSource.includes(`./${relativePath}?v=20260726-notice-copy-v1`));
     assert.ok(appSource.includes(sri));
   }
   assert.match(html, /connect-src 'none'/);
