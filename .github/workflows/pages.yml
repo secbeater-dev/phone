@@ -42,8 +42,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p _site
-          cp .nojekyll 404.html admin.html app.js index.html styles.css _site/
-          cp -R assets vendor _site/
+          cp .nojekyll 404.html admin.html app.js attachment-export.js index.html styles.css _site/
+          mkdir -p _site/assets _site/vendor/licenses
+          cp assets/Beater_icon.png assets/ai-partner.webp _site/assets/
+          cp vendor/xlsx.full.min.js vendor/exceljs.min.js vendor/pdf-lib.min.js \
+             vendor/fontkit.umd.min.js vendor/open-huninn-data.js _site/vendor/
+          cp vendor/licenses/ExcelJS-LICENSE.txt \
+             vendor/licenses/pdf-lib-LICENSE.md \
+             vendor/licenses/fontkit-NOTICE.txt \
+             vendor/licenses/open-huninn-LICENSE.txt _site/vendor/licenses/
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact

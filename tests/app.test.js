@@ -5,11 +5,22 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const XLSX = require("../vendor/xlsx.full.min.js");
+const ExcelJS = require("../vendor/exceljs.min.js");
+const PDFLib = require("../vendor/pdf-lib.min.js");
+const fontkit = require("../vendor/fontkit.umd.min.js");
+const fontBase64 = require("../vendor/open-huninn-data.js");
+const AttachmentExport = require("../attachment-export.js");
 const PhoneWorkbench = require("../app.js");
 
 function workbookBytes(rows, sheetName = "工作表1") {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), sheetName);
+  return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+}
+
+function multiSheetWorkbookBytes(sheets) {
+  const workbook = XLSX.utils.book_new();
+  sheets.forEach(({ name, rows }) => XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), name));
   return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 }
 
@@ -54,6 +65,8 @@ function fetProsecutorRows({ withSpacer = false, repeatedSection = false } = {})
     ["電話號碼：0900000101"],
     fetProsecutorHeaders(withSpacer),
     row(["2026-07-01T01:02:03", "10", "0900000101", "111111111111111", "發話", "0900000102", "0900000199", "SYNTH-1001", "合成備註"]),
+    row(["", "", "", "", "", "", "", "SYNTH-1002", ""]),
+    row(["", "", "", "", "", "", "", "SYNTH-1002", ""]),
     row(["2026-07-01T02:03:04", "20", "0900000101", "", "受話", "0900000103", "", "", ""]),
     row(["invalid-synthetic-date", "5", "0900000101", "", "受話", "", "", "", ""]),
   ];
@@ -113,8 +126,8 @@ test("parses the Far EasTone prosecutor-office nine-column XLSX layout", () => {
   assert.equal(workspace.records[0].imei, "111111111111111");
   assert.match(workspace.records[0].note, /轉接電話：0900000199/);
   assert.match(workspace.records[0].note, /合成備註/);
-  assert.equal(workspace.records[0].base_refs.length, 1);
-  assert.equal(workspace.base_stations.length, 1);
+  assert.equal(workspace.records[0].base_refs.length, 2);
+  assert.equal(workspace.base_stations.length, 2);
   assert.equal(workspace.records[2].occurred_at, "invalid-synthetic-date");
   assert.equal(workspace.parse_warnings.length, 1);
 });
@@ -134,6 +147,85 @@ test("parses spacer columns and every repeated Far EasTone query section", () =>
   assert.equal(workspace.records[3].counterparty_phone, "0900000202");
   assert.equal(workspace.records[3].imei, "222222222222222");
   assert.equal(workspace.records[3].base_refs[0].role, "primary");
+});
+
+test("tracks the actual source sheet for Far EasTone records", () => {
+  const firstRows = fetProsecutorRows().slice(0, 9);
+  const secondRows = [
+    fetProsecutorHeaders(),
+    ["2026-07-05T04:05:06", "12", "0900000301", "", "發話", "0900000302", "", "SYNTH-3001", ""],
+  ];
+  const workspace = PhoneWorkbench.parseImportFile("synthetic-fet-sheets.xlsx", multiSheetWorkbookBytes([
+    { name: "第一區段", rows: firstRows },
+    { name: "第二區段", rows: secondRows },
+  ]));
+
+  assert.ok(workspace.records.some((record) => record.source_sheet === "第一區段"));
+  assert.ok(workspace.records.some((record) => record.source_sheet === "第二區段"));
+});
+
+test("merges every selected workspace without overwriting earlier call records", () => {
+  const first = PhoneWorkbench.parseImportFile("synthetic-fet-a.xlsx", workbookBytes(fetProsecutorRows()));
+  const second = PhoneWorkbench.parseImportFile("synthetic-fet-b.xlsx", workbookBytes(fetProsecutorRows({ withSpacer: true, repeatedSection: true })));
+  const merged = PhoneWorkbench.mergeWorkspaces([first, second]);
+
+  assert.deepEqual(merged.case.source_files, ["synthetic-fet-a.xlsx", "synthetic-fet-b.xlsx"]);
+  assert.equal(merged.records.length, first.records.length + second.records.length);
+  assert.equal(merged.case.total_records, merged.records.length);
+  assert.equal(merged.case.summary.records, merged.records.length);
+  assert.ok(merged.records.some((record) => record.source_file === "synthetic-fet-a.xlsx"));
+  assert.ok(merged.records.some((record) => record.source_file === "synthetic-fet-b.xlsx"));
+  assert.match(merged.case.subject["電話號碼"], /、/);
+  assert.ok(merged.records.every((record) => record.occurred_at || record.call_type || record.target_phone || record.counterparty_phone || record.imei || record.note || record.duration_seconds !== null));
+});
+
+test("builds a complete attachment report with both ranking modes and browser-only notes", () => {
+  const first = PhoneWorkbench.parseImportFile("synthetic-fet-a.xlsx", workbookBytes(fetProsecutorRows()));
+  const second = PhoneWorkbench.parseImportFile("synthetic-fet-b.xlsx", workbookBytes(fetProsecutorRows({ repeatedSection: true })));
+  const merged = PhoneWorkbench.mergeWorkspaces([first, second]);
+  const report = PhoneWorkbench.buildAttachmentReport(merged, { "0900000102": "合成電話備註" }, "2026-07-26T00:00:00.000Z");
+
+  assert.equal(report.meta.scope, "complete_import");
+  assert.equal(report.calls.length, merged.records.length);
+  assert.equal(report.hours.length, 24);
+  assert.equal(report.stats.count.totalRows.length, report.stats.seconds.totalRows.length);
+  assert.ok(report.calls.some((record) => record.counterparty_note === "合成電話備註"));
+  assert.equal(report.profile.imeis.length > 0, true);
+});
+
+test("creates a six-sheet attachment XLSX with identifiers stored as text", async () => {
+  const workspace = PhoneWorkbench.parseImportFile("synthetic-fet.xlsx", workbookBytes(fetProsecutorRows({ repeatedSection: true })));
+  workspace.records[0].note = "=SYNTHETIC_FORMULA";
+  const report = PhoneWorkbench.buildAttachmentReport(workspace, {}, "2026-07-26T00:00:00.000Z");
+  const chartDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+  const bytes = await AttachmentExport.createAttachmentXlsx(report, ExcelJS, chartDataUrl);
+  const workbook = XLSX.read(bytes, { type: "array", raw: true });
+  const styledWorkbook = new ExcelJS.Workbook();
+  await styledWorkbook.xlsx.load(bytes);
+
+  assert.deepEqual(workbook.SheetNames, AttachmentExport.SHEET_NAMES);
+  assert.ok(styledWorkbook.worksheets.every((sheet) => sheet.views[0].ySplit === 5));
+  assert.equal(styledWorkbook.media.length, 1);
+  assert.equal(styledWorkbook.getWorksheet("時間分布圖").getImages().length, 1);
+  const callSheet = workbook.Sheets["通聯列表"];
+  assert.equal(callSheet.A6.t, "s");
+  assert.equal(callSheet.E6.t, "s");
+  assert.equal(callSheet.O6.t, "s");
+  assert.equal(callSheet.O6.f, undefined);
+  assert.match(callSheet.O6.v, /^=/);
+});
+
+test("creates six searchable-font PDF document structures from synthetic data", async () => {
+  const workspace = PhoneWorkbench.parseImportFile("synthetic-fet.xlsx", workbookBytes(fetProsecutorRows({ repeatedSection: true })));
+  const report = PhoneWorkbench.buildAttachmentReport(workspace, { "0900000102": "合成電話備註" }, "2026-07-26T00:00:00.000Z");
+  const fontBytes = Buffer.from(fontBase64, "base64");
+
+  for (const section of AttachmentExport.PDF_SECTIONS) {
+    const bytes = await AttachmentExport.createAttachmentPdf(report, section.key, PDFLib, fontkit, fontBytes);
+    assert.equal(Buffer.from(bytes.subarray(0, 4)).toString("ascii"), "%PDF");
+    const document = await PDFLib.PDFDocument.load(bytes);
+    assert.ok(document.getPageCount() >= 1, `${section.key} PDF should contain at least one page`);
+  }
 });
 
 test("explicit direction overrides raw call type in phone statistics", () => {
@@ -177,7 +269,8 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   assert.doesNotMatch(html, /googletagmanager|gtag\s*\(/i);
   assert.doesNotMatch(html, /tellows\.tw/i);
   assert.match(html, /今日重點（2026-07-26）/);
-  assert.match(html, /遠傳地檢新版 XLSX/);
+  assert.match(html, /附卷檔案匯出/);
+  assert.match(html, /多檔匯入/);
   assert.match(html, /NT\$1,500/);
   assert.match(html, /家庭分享教學/);
   assert.match(html, /https:\/\/families\.google\/intl\/zh-TW_ALL\/families\//);
@@ -185,12 +278,35 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   assert.match(html, /https:\/\/secbeater\.notion\.site\//);
   assert.doesNotMatch(html, /supportPasswordInput|SUPPORT_PASSWORD|目前支援檔案類型/);
 
-  for (const relativePath of ["vendor/xlsx.full.min.js", "app.js"]) {
+  for (const relativePath of ["vendor/xlsx.full.min.js", "attachment-export.js", "app.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
     assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
     assert.ok(html.includes(`'${sri}'`));
   }
+  const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
+  for (const relativePath of ["vendor/exceljs.min.js", "vendor/pdf-lib.min.js", "vendor/fontkit.umd.min.js", "vendor/open-huninn-data.js"]) {
+    const bytes = fs.readFileSync(path.join(root, relativePath));
+    const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
+    assert.ok(html.includes(`'${sri}'`));
+    assert.ok(appSource.includes(`./${relativePath}`));
+    assert.ok(appSource.includes(sri));
+  }
+  assert.match(html, /connect-src 'none'/);
+  assert.match(appSource, /CALL_PAGE_SIZE = 500/);
+  assert.doesNotMatch(appSource, /rows\.slice\(0,\s*5000\)/);
+});
+
+test("Pages deploys attachment assets from an explicit file allowlist", () => {
+  const root = path.resolve(__dirname, "..");
+  const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "pages.yml"), "utf8");
+  const ignore = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
+  assert.match(workflow, /attachment-export\.js/);
+  for (const asset of ["exceljs.min.js", "pdf-lib.min.js", "fontkit.umd.min.js", "open-huninn-data.js", "fontkit-NOTICE.txt", "open-huninn-LICENSE.txt"]) {
+    assert.ok(workflow.includes(asset), `${asset} must be explicitly deployed`);
+  }
+  assert.doesNotMatch(workflow, /cp\s+-R\s+assets\s+vendor/);
+  assert.match(ignore, /附卷\*\.pdf/);
 });
 
 test("private workbook integration is local-only and opt-in", { skip: !process.env.PRIVATE_CDR_XLSX }, () => {
@@ -236,7 +352,7 @@ test("private Far EasTone workbook integration is local-only and opt-in", { skip
       });
       if (!headers || metadataRow) return;
       const data = Object.fromEntries(headers.map((header, index) => [header, String(row[index] ?? "").trim()]).filter(([header]) => header));
-      if (["始話時間", "通話秒數", "調閱號碼", "IMEI", "通話類別", "通話對象", "轉接電話", "基地台/交換機"].some((key) => data[key])) expectedRecords += 1;
+      if (["始話時間", "通話秒數", "調閱號碼", "IMEI", "通話類別", "通話對象", "轉接電話", "備註"].some((key) => data[key])) expectedRecords += 1;
     });
   });
 
@@ -244,4 +360,5 @@ test("private Far EasTone workbook integration is local-only and opt-in", { skip
   assert.ok(workspace.records.length === expectedRecords, "private record completeness check failed");
   assert.ok(workspace.records.every((record) => ["inbound", "outbound", "data", "other"].includes(record.direction)), "private direction check failed");
   assert.ok(workspace.records.every((record) => Array.isArray(record.base_refs)), "private station shape check failed");
+  assert.ok(workspace.records.every((record) => record.occurred_at || record.call_type || record.target_phone || record.counterparty_phone || record.imei || record.note || record.duration_seconds !== null), "private visible record check failed");
 });

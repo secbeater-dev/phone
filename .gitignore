@@ -12,6 +12,8 @@ local-data/
 phone-workspace-*.json
 phone-local-settings-*.json
 phone-submission-*.csv
+附卷*.pdf
+phone-attachment-*.pdf
 
 # Generated deployment and local tooling output.
 _site/

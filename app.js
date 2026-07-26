@@ -1,10 +1,10 @@
 (function (root, factory) {
   if (typeof module === "object" && module.exports) {
-    module.exports = factory(root.XLSX || require("./vendor/xlsx.full.min.js"));
+    module.exports = factory(root.XLSX || require("./vendor/xlsx.full.min.js"), require("./attachment-export.js"));
   } else {
-    root.PhoneWorkbench = factory(root.XLSX);
+    root.PhoneWorkbench = factory(root.XLSX, root.PhoneAttachmentExport);
   }
-})(typeof globalThis !== "undefined" ? globalThis : window, function (XLSX) {
+})(typeof globalThis !== "undefined" ? globalThis : window, function (XLSX, AttachmentExport) {
   "use strict";
 
   const STORAGE_KEYS = {
@@ -17,8 +17,17 @@
     sidebarCollapsed: "phone-workbench-sidebar-collapsed",
   };
   const LOCAL_EXPORT_VERSION = "phone-workbench-local-settings-v1";
+  const CALL_PAGE_SIZE = 500;
+  const ATTACHMENT_ASSETS = {
+    exceljs: { src: "./vendor/exceljs.min.js", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
+    pdfLib: { src: "./vendor/pdf-lib.min.js", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
+    fontkit: { src: "./vendor/fontkit.umd.min.js", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
+    fontData: { src: "./vendor/open-huninn-data.js", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
+  };
+  const loadedAttachmentAssets = new Map();
   const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}-${String(hour + 1).padStart(2, "0")}`);
   const CALL_COLUMNS = [
+    { key: "source_file", width: 180, min: 130 },
     { key: "occurred_at", width: 168, min: 120 },
     { key: "call_type", width: 110, min: 82 },
     { key: "target_phone", width: 150, min: 120 },
@@ -57,6 +66,7 @@
     currentWorkspace: null,
     callRecords: [],
     callSort: { column: "occurred_at", direction: "asc" },
+    callPage: 1,
     phoneStatsRankMode: "count",
     hourSelection: new Set(Array.from({ length: 24 }, (_, index) => index)),
     appliedHourSelection: new Set(Array.from({ length: 24 }, (_, index) => index)),
@@ -94,7 +104,12 @@
     });
     $("importButton")?.addEventListener("click", () => $("fileInput")?.click());
     $("fileInput")?.addEventListener("change", handleFileImport);
-    $("recordSearch")?.addEventListener("input", renderTwoWayCalls);
+    $("recordSearch")?.addEventListener("input", () => {
+      state.callPage = 1;
+      renderTwoWayCalls();
+    });
+    $("callPrevPage")?.addEventListener("click", () => changeCallPage(-1));
+    $("callNextPage")?.addEventListener("click", () => changeCallPage(1));
     document.querySelector("#callsView thead")?.addEventListener("click", (event) => {
       if (event.target.closest(".call-column-resizer")) return;
       const button = event.target.closest("[data-call-sort]");
@@ -130,10 +145,22 @@
     $("importLocalSettingsInput")?.addEventListener("change", importLocalSettings);
     $("sidebarCollapseButton")?.addEventListener("click", toggleSidebarCollapsed);
     $("themeToggleButton")?.addEventListener("click", toggleTheme);
+    $("attachmentExportButton")?.addEventListener("click", showAttachmentExportModal);
+    $("attachmentExportCloseButton")?.addEventListener("click", hideAttachmentExportModal);
+    $("attachmentXlsxButton")?.addEventListener("click", downloadAttachmentXlsx);
+    document.querySelectorAll("[data-attachment-pdf]").forEach((button) => {
+      button.addEventListener("click", () => downloadAttachmentPdf(button.dataset.attachmentPdf));
+    });
+    $("attachmentExportModal")?.addEventListener("click", (event) => {
+      if (event.target === $("attachmentExportModal")) hideAttachmentExportModal();
+    });
     $("noticeDismissButton")?.addEventListener("click", hideUsageNotice);
     $("oneClickUpdateButton")?.addEventListener("click", runOneClickUpdate);
     $("usageNoticeModal")?.addEventListener("click", (event) => {
       if (event.target === $("usageNoticeModal")) hideUsageNotice();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !$("attachmentExportModal")?.hidden) hideAttachmentExportModal();
     });
     document.addEventListener("pointermove", handleCallColumnResizeMove);
     document.addEventListener("pointerup", handleCallColumnResizeEnd);
@@ -250,17 +277,26 @@
     if (!files.length) return;
     $("importStatus").textContent = `匯入 ${files.length} 個檔案中...`;
     $("importResults").innerHTML = "";
+    const workspaces = [];
+    let failures = 0;
     for (const file of files) {
       try {
         const content = await readFileArrayBuffer(file);
         const workspace = parseImportFile(file.name, content);
-        applyWorkspace(workspace);
+        workspaces.push(workspace);
         appendImportResult(workspace.case);
       } catch (error) {
+        failures += 1;
         appendImportError(file.name, error);
       }
     }
-    $("importStatus").textContent = "匯入完成。";
+    if (workspaces.length) {
+      applyWorkspace(mergeWorkspaces(workspaces), workspaces.map((workspace) => workspace.case));
+      setView("calls");
+      $("importStatus").textContent = failures ? "部分檔案匯入完成；失敗項目請見下方。" : "匯入完成。";
+    } else {
+      $("importStatus").textContent = "所有檔案均匯入失敗，原資料未變更。";
+    }
     $("fileInput").value = "";
   }
 
@@ -287,10 +323,12 @@
     $("importResults").appendChild(div);
   }
 
-  function applyWorkspace(workspace) {
-    state.currentWorkspace = workspace || null;
-    state.cases.push(workspace?.case || {});
-    state.callRecords = workspace?.records || [];
+  function applyWorkspace(workspace, cases) {
+    const normalized = normalizeWorkspace(workspace);
+    state.currentWorkspace = normalized;
+    state.cases = Array.isArray(cases) && cases.length ? cases : normalized ? [normalized.case] : [];
+    state.callRecords = normalized?.records || [];
+    state.callPage = 1;
     state.expandedHotspotAddress = "";
     prefillSubmissionPhones(state.callRecords);
     renderAllViews();
@@ -340,6 +378,7 @@
       if (!query) return true;
       return [
         record.occurred_at,
+        record.source_file,
         record.call_type,
         record.target_phone,
         record.counterparty_phone,
@@ -351,8 +390,13 @@
       ]
         .some((value) => String(value || "").toLowerCase().includes(query));
     });
+    const pageCount = Math.max(1, Math.ceil(rows.length / CALL_PAGE_SIZE));
+    state.callPage = Math.min(Math.max(1, state.callPage), pageCount);
+    const start = (state.callPage - 1) * CALL_PAGE_SIZE;
+    const pageRows = rows.slice(start, start + CALL_PAGE_SIZE);
     $("callRows").innerHTML = rows.length
-      ? rows.slice(0, 5000).map((record) => `<tr>
+      ? pageRows.map((record) => `<tr>
+          <td>${escapeHtml(record.source_file || "")}</td>
           <td>${escapeHtml(record.occurred_at || "")}</td>
           <td>${escapeHtml(record.call_type || "")}</td>
           <td>${callPhoneLink(record.target_phone)}</td>
@@ -363,8 +407,25 @@
           <td>${escapeHtml(record.imei || "")}</td>
           <td>${escapeHtml(record.external_ip || record.note || "")}</td>
         </tr>`).join("")
-      : `<tr><td colspan="9">尚未匯入資料。</td></tr>`;
+      : `<tr><td colspan="10">尚未匯入資料。</td></tr>`;
+    renderCallPagination(rows.length, start, pageRows.length, pageCount);
     applyCallColumnWidths();
+  }
+
+  function renderCallPagination(total, start, pageLength, pageCount) {
+    const summary = $("callPageSummary");
+    if (summary) {
+      summary.textContent = total
+        ? `第 ${(start + 1).toLocaleString()}-${(start + pageLength).toLocaleString()} 筆，共 ${total.toLocaleString()} 筆（第 ${state.callPage}/${pageCount} 頁）`
+        : "共 0 筆";
+    }
+    if ($("callPrevPage")) $("callPrevPage").disabled = state.callPage <= 1;
+    if ($("callNextPage")) $("callNextPage").disabled = state.callPage >= pageCount;
+  }
+
+  function changeCallPage(delta) {
+    state.callPage = Math.max(1, state.callPage + Number(delta || 0));
+    renderTwoWayCalls();
   }
 
   function sortedCallRecords() {
@@ -390,6 +451,7 @@
     } else {
       state.callSort = { column, direction: "asc" };
     }
+    state.callPage = 1;
     renderTwoWayCalls();
   }
 
@@ -847,6 +909,141 @@
     }
   }
 
+  function showAttachmentExportModal() {
+    const modal = $("attachmentExportModal");
+    if (!modal) return;
+    modal.hidden = false;
+    const hasData = Boolean(state.currentWorkspace && state.callRecords.length);
+    $("attachmentXlsxButton").disabled = !hasData;
+    document.querySelectorAll("[data-attachment-pdf]").forEach((button) => { button.disabled = !hasData; });
+    setAttachmentExportStatus(hasData ? "請選擇要下載的附卷格式。" : "尚未匯入資料，無法產生附卷檔案。", !hasData);
+    $("attachmentExportCloseButton")?.focus();
+  }
+
+  function hideAttachmentExportModal() {
+    const modal = $("attachmentExportModal");
+    if (modal) modal.hidden = true;
+  }
+
+  async function downloadAttachmentXlsx() {
+    if (!state.currentWorkspace || !state.callRecords.length || !AttachmentExport) return;
+    setAttachmentExportBusy(true);
+    setAttachmentExportStatus("正在產生六分頁 XLSX，資料只在瀏覽器本機處理。", false);
+    try {
+      await loadAttachmentAsset("exceljs");
+      const report = buildAttachmentReport(state.currentWorkspace, state.phoneNotes);
+      const chartDataUrl = createHourChartDataUrl(report.hours);
+      const bytes = await AttachmentExport.createAttachmentXlsx(report, globalThis.ExcelJS, chartDataUrl);
+      downloadBlob(`附卷檔案-${attachmentFileStamp()}.xlsx`, bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      setAttachmentExportStatus("XLSX 已下載。請依個資規範妥善保管。", false);
+    } catch (error) {
+      setAttachmentExportStatus(`XLSX 產生失敗：${error.message}`, true);
+    } finally {
+      setAttachmentExportBusy(false);
+    }
+  }
+
+  async function downloadAttachmentPdf(sectionKey) {
+    if (!state.currentWorkspace || !state.callRecords.length || !AttachmentExport) return;
+    const section = AttachmentExport.PDF_SECTIONS.find((item) => item.key === sectionKey);
+    if (!section) return;
+    setAttachmentExportBusy(true);
+    setAttachmentExportStatus(`正在產生「${section.label}」PDF，資料只在瀏覽器本機處理。`, false);
+    try {
+      await loadAttachmentAsset("pdfLib");
+      await loadAttachmentAsset("fontkit");
+      await loadAttachmentAsset("fontData");
+      const report = buildAttachmentReport(state.currentWorkspace, state.phoneNotes);
+      const fontBytes = base64ToBytes(globalThis.PhoneExportFontBase64);
+      const bytes = await AttachmentExport.createAttachmentPdf(report, sectionKey, globalThis.PDFLib, globalThis.fontkit, fontBytes);
+      downloadBlob(`附卷-${section.label}-${attachmentFileStamp()}.pdf`, bytes, "application/pdf");
+      setAttachmentExportStatus(`「${section.label}」PDF 已下載。請依個資規範妥善保管。`, false);
+    } catch (error) {
+      setAttachmentExportStatus(`PDF 產生失敗：${error.message}`, true);
+    } finally {
+      setAttachmentExportBusy(false);
+    }
+  }
+
+  function setAttachmentExportBusy(busy) {
+    if ($("attachmentXlsxButton")) $("attachmentXlsxButton").disabled = busy;
+    document.querySelectorAll("[data-attachment-pdf]").forEach((button) => { button.disabled = busy; });
+    if ($("attachmentExportCloseButton")) $("attachmentExportCloseButton").disabled = busy;
+    $("attachmentExportModal")?.setAttribute("aria-busy", busy ? "true" : "false");
+  }
+
+  function setAttachmentExportStatus(message, danger) {
+    const target = $("attachmentExportStatus");
+    if (!target) return;
+    target.textContent = message;
+    target.classList.toggle("danger-text", Boolean(danger));
+    target.classList.toggle("success-text", !danger);
+  }
+
+  function loadAttachmentAsset(key) {
+    if (loadedAttachmentAssets.has(key)) return loadedAttachmentAssets.get(key);
+    const asset = ATTACHMENT_ASSETS[key];
+    if (!asset) return Promise.reject(new Error("未知的本地匯出資產"));
+    const promise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = asset.src;
+      script.integrity = asset.integrity;
+      script.crossOrigin = "anonymous";
+      script.onload = () => resolve();
+      script.onerror = () => {
+        loadedAttachmentAssets.delete(key);
+        reject(new Error("本地匯出資產載入失敗"));
+      };
+      document.head.appendChild(script);
+    });
+    loadedAttachmentAssets.set(key, promise);
+    return promise;
+  }
+
+  function createHourChartDataUrl(hours) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1400;
+    canvas.height = 520;
+    const context = canvas.getContext("2d");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#171717";
+    context.font = "bold 28px sans-serif";
+    context.fillText("24 小時通聯分布", 54, 48);
+    const max = Math.max(1, ...hours.map((item) => item.count));
+    const chartLeft = 54;
+    const chartTop = 86;
+    const chartHeight = 340;
+    const gap = 10;
+    const barWidth = (canvas.width - chartLeft * 2 - gap * 23) / 24;
+    context.textAlign = "center";
+    hours.forEach((item, index) => {
+      const height = item.count ? (item.count / max) * chartHeight : 0;
+      const x = chartLeft + index * (barWidth + gap);
+      context.fillStyle = "#171717";
+      context.fillRect(x, chartTop + chartHeight - height, barWidth, height);
+      context.fillStyle = "#60646c";
+      context.font = "18px sans-serif";
+      context.fillText(String(index).padStart(2, "0"), x + barWidth / 2, chartTop + chartHeight + 28);
+      context.fillStyle = "#171717";
+      context.font = "bold 16px sans-serif";
+      context.fillText(String(item.count), x + barWidth / 2, chartTop + chartHeight - height - 8);
+    });
+    context.textAlign = "left";
+    return canvas.toDataURL("image/png");
+  }
+
+  function base64ToBytes(value) {
+    const binary = atob(String(value || ""));
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return bytes;
+  }
+
+  function attachmentFileStamp(date = new Date()) {
+    return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`;
+  }
+
   function parseImportFile(fileName, inputBytes) {
     const bytes = toUint8Array(inputBytes);
     const lower = String(fileName || "").toLowerCase();
@@ -967,15 +1164,18 @@
 
     sheets.forEach((sheet) => {
       let activeHeaders = null;
+      let lastRecord = null;
       sheet.rows.forEach((row) => {
         const canonicalValues = row.values.map(canonicalHeaderText);
         if (hasHeaders(canonicalValues, FET_PROSECUTOR_CALL_HEADERS)) {
           activeHeaders = canonicalValues;
+          lastRecord = null;
           return;
         }
 
         if (isFetProsecutorMetadataRow(row.values)) {
           mergeSubjectMetadata(subjectValues, metadataFromValuesWithAdjacent(row.values, FET_PROSECUTOR_METADATA_KEYS));
+          lastRecord = null;
           return;
         }
         if (!activeHeaders) return;
@@ -983,7 +1183,7 @@
         const data = rowDict(activeHeaders, row.values);
         const rawOccurredAt = cellText(data["始話時間"]);
         const rawCallType = cellText(data["通話類別"]);
-        const hasRecordData = [
+        const hasPrimaryRecordData = [
           rawOccurredAt,
           data["通話秒數"],
           data["調閱號碼"],
@@ -991,9 +1191,14 @@
           rawCallType,
           data["通話對象"],
           data["轉接電話"],
-          data["基地台/交換機"],
+          data["備註"],
         ].some((value) => cellText(value));
-        if (!hasRecordData) return;
+        const stationValue = cellText(data["基地台/交換機"]);
+        if (!hasPrimaryRecordData) {
+          if (stationValue && lastRecord) addStationCompoundRef(lastRecord, stationMap, "primary", stationValue);
+          else if (stationValue) parsed.warnings.push(`第 ${row.rowNumber} 列的基地台續行沒有可附加的通聯列，已略過。`);
+          return;
+        }
 
         const occurredAt = normalizeDatetime(rawOccurredAt);
         if (rawOccurredAt && !occurredAt) parsed.warnings.push(`第 ${row.rowNumber} 列的始話時間無法正規化，已保留原文。`);
@@ -1004,6 +1209,7 @@
         ].filter(Boolean).join("；");
         const record = baseRecord({
           row_number: row.rowNumber,
+          source_sheet: sheet.title,
           call_type: rawCallType,
           direction: directionLabel(rawCallType),
           occurred_at: occurredAt || rawOccurredAt,
@@ -1015,6 +1221,7 @@
         });
         addStationCompoundRef(record, stationMap, "primary", data["基地台/交換機"]);
         parsed.records.push(record);
+        lastRecord = record;
       });
     });
 
@@ -1045,11 +1252,12 @@
 
   function makeWorkspace(parsed) {
     const stations = parsed.base_stations || [];
-    const records = (parsed.records || []).map((record) => parsedRecordPayload(record));
+    const records = (parsed.records || []).map((record) => parsedRecordPayload(record, parsed.file_name, parsed.sheet_name));
     const summary = parsedSummary(records, stations);
     return {
       case: {
         source_file: parsed.file_name,
+        source_files: parsed.file_name ? [parsed.file_name] : [],
         carrier: parsed.carrier,
         source_format: parsed.source_format,
         sheet_name: parsed.sheet_name,
@@ -1066,11 +1274,13 @@
     };
   }
 
-  function parsedRecordPayload(record) {
+  function parsedRecordPayload(record, sourceFile, sourceSheet) {
     const target = normalizePhoneText(record.target_phone);
     const counterparty = normalizePhoneText(record.counterparty_phone);
     return {
       row_number: record.row_number,
+      source_file: record.source_file || sourceFile || "",
+      source_sheet: record.source_sheet || sourceSheet || "",
       occurred_at: record.occurred_at || "",
       ended_at: record.ended_at || "",
       duration_seconds: toInt(record.duration_seconds),
@@ -1110,6 +1320,89 @@
       station_count: stations.length,
       call_types: Array.from(callCounts, ([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value),
     };
+  }
+
+  function normalizeWorkspace(workspace) {
+    if (!workspace || !workspace.case || !Array.isArray(workspace.records)) return null;
+    const sourceFiles = uniqueTextValues(workspace.case.source_files || [workspace.case.source_file]);
+    const records = workspace.records.map((record) => parsedRecordPayload(
+      record,
+      record.source_file || workspace.case.source_file,
+      record.source_sheet || workspace.case.sheet_name,
+    ));
+    const stations = dedupeStations(workspace.base_stations || []);
+    const warnings = uniqueTextValues([...(workspace.parse_warnings || []), ...(workspace.case.parse_warnings || [])]);
+    return {
+      case: {
+        ...workspace.case,
+        source_file: workspace.case.source_file || sourceFiles[0] || "",
+        source_files: sourceFiles,
+        total_records: records.length,
+        summary: parsedSummary(records, stations),
+        parse_warnings: warnings,
+      },
+      records,
+      base_stations: stations,
+      parse_warnings: warnings,
+    };
+  }
+
+  function mergeWorkspaces(workspaces) {
+    const normalized = (workspaces || []).map(normalizeWorkspace).filter(Boolean);
+    if (!normalized.length) return null;
+    if (normalized.length === 1) return normalized[0];
+    const records = normalized.flatMap((workspace) => workspace.records);
+    const stations = dedupeStations(normalized.flatMap((workspace) => workspace.base_stations));
+    const sourceFiles = uniqueTextValues(normalized.flatMap((workspace) => workspace.case.source_files || [workspace.case.source_file]));
+    const warnings = uniqueTextValues(normalized.flatMap((workspace) => workspace.parse_warnings || []));
+    const subject = mergeSubjects(normalized.map((workspace) => workspace.case.subject || {}));
+    const carrierValues = uniqueTextValues(normalized.map((workspace) => workspace.case.carrier));
+    const formatValues = uniqueTextValues(normalized.map((workspace) => workspace.case.source_format));
+    const sheetValues = uniqueTextValues(normalized.map((workspace) => workspace.case.sheet_name));
+    return {
+      case: {
+        source_file: sourceFiles[0] || "",
+        source_files: sourceFiles,
+        carrier: carrierValues.join("、"),
+        source_format: formatValues.join("、"),
+        sheet_name: sheetValues.join("、"),
+        header_row: null,
+        total_source_rows: normalized.reduce((sum, workspace) => sum + Number(workspace.case.total_source_rows || 0), 0),
+        total_records: records.length,
+        subject,
+        summary: parsedSummary(records, stations),
+        parse_warnings: warnings,
+      },
+      records,
+      base_stations: stations,
+      parse_warnings: warnings,
+    };
+  }
+
+  function mergeSubjects(subjects) {
+    const values = new Map();
+    (subjects || []).forEach((subject) => {
+      Object.entries(subject || {}).forEach(([key, value]) => {
+        const set = values.get(key) || new Set();
+        uniqueTextValues(String(value ?? "").split("、")).forEach((item) => set.add(item));
+        values.set(key, set);
+      });
+    });
+    return Object.fromEntries(Array.from(values, ([key, set]) => [key, Array.from(set).join("、")]));
+  }
+
+  function dedupeStations(stations) {
+    const map = new Map();
+    (stations || []).forEach((station) => {
+      if (!station) return;
+      const key = station.station_key || stationKey(station);
+      if (key && !map.has(key)) map.set(key, { ...station, station_key: key });
+    });
+    return Array.from(map.values());
+  }
+
+  function uniqueTextValues(values) {
+    return Array.from(new Set((values || []).map(cellText).filter(Boolean)));
   }
 
   function parseTwmCallXml(fileName, xml) {
@@ -1482,6 +1775,8 @@
   function baseRecord(values) {
     return {
       row_number: values.row_number,
+      source_file: values.source_file || "",
+      source_sheet: values.source_sheet || "",
       call_type: values.call_type || "",
       direction: values.direction || "",
       occurred_at: values.occurred_at || "",
@@ -1835,7 +2130,7 @@
     const key = stationKey(station);
     station.station_key = key;
     stationMap.set(key, station);
-    record.base_refs.push({ role, station_key: key });
+    if (!record.base_refs.some((ref) => ref.station_key === key)) record.base_refs.push({ role, station_key: key });
   }
 
   function addStationRef(record, stationMap, role, cellId, address) {
@@ -1844,7 +2139,7 @@
     const key = stationKey(station);
     station.station_key = key;
     stationMap.set(key, station);
-    record.base_refs.push({ role, station_key: key });
+    if (!record.base_refs.some((ref) => ref.station_key === key)) record.base_refs.push({ role, station_key: key });
   }
 
   function addChtStationRefs(record, stationMap, value) {
@@ -2072,6 +2367,79 @@
     }).sort((a, b) => b.count - a.count || a.address.localeCompare(b.address, "zh-Hant", { numeric: true }));
   }
 
+  function buildAttachmentReport(workspace, phoneNotes = {}, exportedAt = new Date().toISOString()) {
+    const normalized = normalizeWorkspace(workspace);
+    if (!normalized) throw new Error("沒有可匯出的 workspace");
+    const notes = normalizePhoneNotes(phoneNotes);
+    const stationMap = new Map(normalized.base_stations.map((station) => [station.station_key || stationKey(station), station]));
+    const records = [...normalized.records].sort((a, b) => {
+      return String(a.occurred_at || "").localeCompare(String(b.occurred_at || ""), "zh-Hant", { numeric: true })
+        || String(a.source_file || "").localeCompare(String(b.source_file || ""), "zh-Hant", { numeric: true })
+        || Number(a.row_number || 0) - Number(b.row_number || 0);
+    });
+    const hours = computeHourBuckets(records);
+    const hourTotal = hours.reduce((sum, item) => sum + item.count, 0);
+    const addNotes = (rows) => rows.map((row) => ({ ...row, note: notes[normalizePhoneText(row.phone)] || "" }));
+    const statsCount = computePhoneStats(records, "count");
+    const statsSeconds = computePhoneStats(records, "seconds");
+    const summary = normalized.case.summary || parsedSummary(records, normalized.base_stations);
+    return {
+      meta: {
+        exported_at: exportedAt,
+        scope: "complete_import",
+        source_files: normalized.case.source_files || uniqueTextValues(records.map((record) => record.source_file)),
+      },
+      hours: hours.map((item) => ({ ...item, percent: hourTotal ? (item.count / hourTotal) * 100 : 0 })),
+      hotspots: computeAddressHotspots(records, normalized.base_stations),
+      calls: records.map((record) => ({
+        ...record,
+        target_note: notes[normalizePhoneText(record.target_phone)] || "",
+        counterparty_note: notes[normalizePhoneText(record.counterparty_phone)] || "",
+        base_stations: recordStationLabels(record, stationMap).join("；"),
+      })),
+      profile: {
+        summary: {
+          "通聯筆數": summary.records || 0,
+          "目標電話數": summary.target_phones || 0,
+          "對象電話數": summary.counterparty_phones || 0,
+          "第一筆時間": summary.first_seen || "-",
+          "最後時間": summary.last_seen || "-",
+          "總秒數": summary.total_duration_seconds || 0,
+          "基地台數": summary.station_count || 0,
+        },
+        subject: Object.entries(normalized.case.subject || {}).map(([key, value]) => ({ key, value: String(value ?? "") })),
+        imeis: collectUniqueImeis(records),
+      },
+      stats: {
+        count: {
+          inboundRows: addNotes(statsCount.inboundRows),
+          outboundRows: addNotes(statsCount.outboundRows),
+          totalRows: addNotes(statsCount.totalRows),
+        },
+        seconds: {
+          inboundRows: addNotes(statsSeconds.inboundRows),
+          outboundRows: addNotes(statsSeconds.outboundRows),
+          totalRows: addNotes(statsSeconds.totalRows),
+        },
+      },
+    };
+  }
+
+  function recordStationLabels(record, stationMap) {
+    const labels = [];
+    const seen = new Set();
+    (record.base_refs || []).forEach((ref) => {
+      const station = stationMap.get(ref.station_key);
+      if (!station) return;
+      const label = cellText(station.address || station.cell_id || (station.is_virtual ? "VOWIFI" : ""));
+      if (label && !seen.has(label)) {
+        seen.add(label);
+        labels.push(label);
+      }
+    });
+    return labels;
+  }
+
   function hourFromIso(value) {
     const match = cellText(value).match(/T(\d{2}):/);
     return match ? Number(match[1]) : -1;
@@ -2147,6 +2515,18 @@
     URL.revokeObjectURL(url);
   }
 
+  function downloadBlob(fileName, bytes, type) {
+    const blob = new Blob([bytes], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   function toLocalDatetimeValue(date) {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
@@ -2170,6 +2550,9 @@
 
   return {
     parseImportFile,
+    mergeWorkspaces,
+    normalizeWorkspace,
+    buildAttachmentReport,
     computePhoneStats,
     computeHourBuckets,
     computeAddressHotspots,
