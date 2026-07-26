@@ -10,6 +10,7 @@ This GitHub Pages build runs fully in the browser. Imported files are parsed loc
 
 - Import supported `.xlsx` and `.xml` CDR files in the browser.
 - Supports the Chunghwa Telecom prosecutor-office XLSX layout with whitespace-normalized headers.
+- Supports the Far EasTone prosecutor-office call XLSX layout, including repeated query sections and spacer-column variants.
 - Review call records, subject metadata, time distribution, phone statistics, and submission CSV output.
 - Export/import local browser settings and export parsed workspace JSON.
 - `/admin.html` and missing routes show a maintenance notice.

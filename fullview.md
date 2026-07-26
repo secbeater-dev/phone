@@ -33,7 +33,7 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 
 ## 3. 載入順序
 
-1. `index.html` 建立側欄、六個 view、匯入控制與使用提醒；提醒中的「今日重點」列出目前發布的使用者可見更新。
+1. `index.html` 建立側欄、六個 view、匯入控制與使用提醒；提醒中的「今日重點」列出目前發布的使用者可見更新，Gemini 區塊使用原生 `details` 顯示家庭分享教學。
 2. 瀏覽器驗證 `vendor/xlsx.full.min.js` 與 `app.js` 的 SHA-384 SRI 後依序執行；CSP 不允許其他 script。
 3. `app.js` 以 UMD 包裝：瀏覽器掛載 `window.PhoneWorkbench`；Node CommonJS 載入本地 SheetJS 並輸出測試介面。
 4. `DOMContentLoaded` 執行 `init()`，還原偏好、綁定事件並渲染所有 view。
@@ -75,7 +75,17 @@ XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版�
 起始代碼-合成起始地址/終止代碼-合成終止地址
 ```
 
-解析成 `start`、`end` 兩個 `base_refs` 並加入去重後的 `base_stations`。其他既有 XLSX/XML 格式沿用原有精確標題判定與正規化流程。
+解析成 `start`、`end` 兩個 `base_refs` 並加入去重後的 `base_stations`。
+
+遠傳地檢新版通聯 XLSX 以 `始話時間`、`通話秒數`、`調閱號碼`、`IMEI`、`通話類別`、`通話對象`、`轉接電話`、`基地台/交換機`、`備註` 識別，允許欄名空白差異及標題中的空白佔位欄。命中後回傳：
+
+```js
+{ carrier: "遠傳電信", sourceFormat: "fet_prosecutor_call_xlsx" }
+```
+
+解析器會逐列掃描整份工作表；遇到重複標題即更新目前欄位索引，因此同一檔案的單一或多個查詢區段都會匯入。案件資料支援 `名稱：值` 及 `名稱：` 後接相鄰儲存格，跨區段同名值去重後以 `、` 合併至 `subject`。已識別的案件資料列、空白列與重複標題不會建立 record。
+
+`始話時間`、`通話秒數`、`調閱號碼`、`通話對象`、`IMEI` 分別映射至標準欄位；`通話類別`保留原文並衍生 `direction`；`轉接電話`與`備註`合併到 `note`；`基地台/交換機`建立 `primary` 基地台參照。非空且無法正規化的日期保留原文並加入只含列號的警告。其他既有 XLSX/XML 格式沿用原有精確標題判定與正規化流程。
 
 ## 6. 標準化介面
 
@@ -119,6 +129,7 @@ XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版�
 - `renderHoursView`：24 小時分布、時段篩選及基地台熱點。
 - `renderSubmissionPreview`：電話驗證、去重、投單預覽與 CSV。
 - `renderExportView`：workspace JSON 與本機設定匯出。
+- 使用提醒：顯示當日更新、Gemini 優惠與可展開家庭分享教學；線上不列支援格式，只提供作者 Telegram 聯絡連結。
 
 匯入值進入 HTML 字串前由 `escapeHtml` 處理。電話只以 `.phone-value` 純文字顯示，不產生外部查詢連結。下載由 `Blob`、`URL.createObjectURL` 與 `download` 屬性在本機完成。
 
@@ -134,14 +145,15 @@ XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版�
 - 沒有 `fetch`、XHR、WebSocket、EventSource、Beacon、表單提交或檔案上傳路徑。
 - 電話不再連往 Tellows；Cloudflare/其他注入 script 不在 CSP 許可清單內。
 - `.gitignore`、CI 敏感副檔名檢查及部署白名單形成三層防護。
+- 完整支援格式清單只保存在 repository 上一層的本機 `supported-formats.md`；它不屬於 Git 工作樹，也不會進入 Pages artifact。
 
 任何真實通聯檔、內容、衍生識別資訊、workspace、投單 CSV、設定匯出、含個資截圖或日誌，都不得加入 Git、Actions artifact、文件或任何外部服務。真實檔只能從 repository 外在本機記憶體中驗證，測試輸出限通過/失敗與檔名。
 
 ## 10. 測試
 
-`node --test tests/app.test.js` 使用記憶體內合成 XLSX，涵蓋：空白標題、用戶資料、主叫/受叫/進來 CDR、調閱門號不在該列、無效日期、IMEI、指定轉接與雙基地台；另有既有台灣大哥大解析、電話方向及超過 20 支電話仍完整保留的排行回歸測試，並驗證 HTML 無 Google/Tellows 且 SRI 與檔案雜湊一致。
+`node --test tests/app.test.js` 使用記憶體內合成 XLSX，涵蓋：中華電信空白標題、用戶資料、主叫/受叫/進來 CDR、調閱門號不在該列、無效日期、IMEI、指定轉接與雙基地台；遠傳地檢新版另涵蓋九欄、空白佔位欄、重複查詢區段、內嵌/相鄰案件資料、缺少通話對象、轉接、備註與基地台。另有既有台灣大哥大解析、電話方向及超過 20 支電話仍完整保留的排行回歸測試，並驗證彈窗文字、指定連結、HTML 無 Google/Tellows 且 SRI 與檔案雜湊一致。
 
-設定 `PRIVATE_CDR_XLSX` 時會啟用 repository 外真實檔整合測試，只斷言格式、有效來源列數相等與方向合法，不輸出資料內容。瀏覽器煙霧測試也只使用合成 XLSX，檢查六個 view、純文字電話與零第三方資產。
+設定 `PRIVATE_CDR_XLSX` 時會啟用 repository 外中華電信真實檔整合測試；設定 `PRIVATE_FET_XLSX` 時會啟用 repository 外遠傳真實檔整合測試。兩者只斷言格式、有效來源列完整性、方向及標準介面，不輸出資料內容。瀏覽器煙霧測試只使用合成 XLSX，檢查六個 view、純文字電話、家庭分享展開與零非預期第三方資產。
 
 ## 11. GitHub Pages 部署
 
@@ -170,3 +182,5 @@ XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版�
 - 2026-07-23：固定網頁文字資產為 LF，讓 Windows、GitHub Actions 與 Pages 使用相同位元組並維持 SRI 驗證一致。
 - 2026-07-24：移除電話統計各分類前 20 名顯示上限，來電、去電與全部電話皆顯示完整排行。
 - 2026-07-24：更新使用提醒的「今日重點」，公告電話統計已改為顯示全部排行。
+- 2026-07-26：新增遠傳地檢新版通聯 XLSX parser，支援空白佔位欄、重複查詢區段、案件資料合併、日期警告及基地台參照。
+- 2026-07-26：更新今日重點、Gemini 價格與家庭分享教學；移除線上支援格式清單，改為作者 Telegram 聯絡連結，並更新左上角 Notion 連結。

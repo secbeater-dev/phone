@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT' 'sha384-I6eP9WHa8a/JREgMib4oXvEnq1zJ2oGIW8UG8vevZ4o/sqVNifsSdIwgwvdTREHQ'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'; media-src 'none'; manifest-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT' 'sha384-yvJ+iXOUmrX9PbUHUK7SV6QoAMxvjPn98sCgvIpIeIBurg86wJYlIKqDoMF79BvO'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'; media-src 'none'; manifest-src 'none'" />
     <title>通聯資料分析工具</title>
     <link rel="icon" type="image/png" href="./assets/Beater_icon.png" />
     <link rel="stylesheet" href="./styles.css" />
@@ -12,7 +12,7 @@
   <body>
     <div class="app-shell">
       <aside class="sidebar">
-        <a class="brand-block" href="https://linktr.ee/secbeater" target="_blank" rel="noopener noreferrer" aria-label="SecBeater Linktree">
+        <a class="brand-block" href="https://secbeater.notion.site/" target="_blank" rel="noopener noreferrer" aria-label="SecBeater Notion">
           <img class="brand-mark" src="./assets/Beater_icon.png" alt="SecBeater" />
           <div class="brand-copy">
             <h1>通聯資料分析工具</h1>
@@ -190,33 +190,14 @@
             <p>任何問題歡迎於 <a href="https://t.me/secbeater" target="_blank" rel="noopener noreferrer">Telegram</a> 中提出。</p>
           </div>
           <section class="notice-focus">
-            <h3>今日重點（2026-07-24）</h3>
+            <h3>今日重點（2026-07-26）</h3>
             <ul class="notice-list">
-              <li>電話統計的來電、去電與完整排行改為顯示全部電話，不再只顯示前 20 名。</li>
+              <li>新增遠傳地檢新版 XLSX，支援單一及重複查詢區段。</li>
+              <li>更新 Gemini 優惠與家庭分享教學，支援檔案類型改由作者私訊說明。</li>
             </ul>
           </section>
           <p class="notice-note">備註：一鍵更新會清除本機設定（所有資料），並強制重載最新版（等同 Ctrl+F5）。</p>
-          <div class="support-unlock">
-            <label class="field-label">支援檔案類型密碼
-              <input id="supportPasswordInput" class="text-input" type="password" autocomplete="off" placeholder="請輸入密碼" />
-            </label>
-            <button id="supportTypesButton" class="secondary-button" type="button">顯示支援檔案類型</button>
-            <p id="supportPasswordMessage" class="message support-password-message" aria-live="polite"></p>
-          </div>
-          <div id="supportTypesPanel" class="support-types-panel" hidden>
-            <h3>目前支援檔案類型</h3>
-            <ul>
-              <li>遠傳雙向通聯 XLSX</li>
-              <li>遠傳行動上網 / 複製貼上 XLSX</li>
-              <li>中華電信地檢通聯 XLSX</li>
-              <li>台哥大雙向通聯 XML</li>
-              <li>台哥大雙向通聯豬改 XLSX</li>
-              <li>台哥大網路歷程 XML</li>
-              <li>台哥大網路歷程豬改 XLSX</li>
-              <li>IMEI 調閱所得通聯 XLSX</li>
-              <li>空白模板 XLSX / XML</li>
-            </ul>
-          </div>
+          <p class="support-contact">支援檔案類型：<a href="https://t.me/tg_secbeater" target="_blank" rel="noopener noreferrer">請私訊作者</a></p>
           <div class="usage-modal-actions">
             <button id="oneClickUpdateButton" class="secondary-button" type="button">一鍵更新（Ctrl+F5＋清除設定）</button>
             <button id="noticeDismissButton" class="primary-button" type="button">我知道了</button>
@@ -224,11 +205,28 @@
         </div>
         <aside class="usage-modal-aside">
           <img class="notice-hero-image" src="./assets/ai-partner.webp" alt="AI 時代效率夥伴" />
-          <p>一起跟上 AI 時代，讓 Gemini Pro 成為你的效率夥伴。一年會員限量優惠 NT$999（原價 NT$8,280），真誠推薦給想提升自己的你。</p>
+          <p>一起跟上 AI 時代，讓 Gemini Pro 成為你的效率夥伴。一年會員限量優惠 NT$1,500（原價 NT$8,280），真誠推薦給想提升自己的你。</p>
+          <details class="family-sharing-details">
+            <summary>家庭分享教學</summary>
+            <div class="family-sharing-content">
+              <p>有訂閱Gemini的可以用這樣方式分享給其他人<br />最多含自己 6個人</p>
+              <p><strong>Gemini 家庭方案分享：</strong></p>
+              <ol>
+                <li>步驟一：<a href="https://families.google/intl/zh-TW_ALL/families/" target="_blank" rel="noopener noreferrer">https://families.google/intl/zh-TW_ALL/families/</a></li>
+                <li>步驟二：傳送邀請給好友(確認右上角切換為有Gemini權益的帳號)</li>
+                <li>步驟三：對方到Gmail接收信件</li>
+              </ol>
+              <p><strong>備註：</strong></p>
+              <ol>
+                <li>雙方地址要在同一國家，請到帳號內切換</li>
+                <li>若有國外付款方式要刪除</li>
+              </ol>
+            </div>
+          </details>
         </aside>
       </div>
     </section>
     <script src="./vendor/xlsx.full.min.js" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
-    <script src="./app.js" integrity="sha384-I6eP9WHa8a/JREgMib4oXvEnq1zJ2oGIW8UG8vevZ4o/sqVNifsSdIwgwvdTREHQ" crossorigin="anonymous"></script>
+    <script src="./app.js" integrity="sha384-yvJ+iXOUmrX9PbUHUK7SV6QoAMxvjPn98sCgvIpIeIBurg86wJYlIKqDoMF79BvO" crossorigin="anonymous"></script>
   </body>
 </html>

@@ -699,26 +699,12 @@ body[data-theme="dark"] .hotspot-times { background: #111111; }
   background: var(--surface);
   color: var(--muted);
 }
-.support-types-panel {
-  padding: 12px;
+.support-contact {
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
-}
-.support-unlock {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto;
-  gap: 8px;
-  align-items: end;
-}
-.support-password-message { grid-column: 1 / -1; }
-.support-password-message a { color: inherit; }
-.support-types-panel ul {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 18px;
-  margin: 8px 0 0;
-  padding-left: 20px;
+  font-weight: 800;
 }
 .usage-modal-actions {
   display: flex;
@@ -741,6 +727,29 @@ body[data-theme="dark"] .hotspot-times { background: #111111; }
   background: var(--surface);
   font-weight: 700;
 }
+.family-sharing-details {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.family-sharing-details summary {
+  padding: 12px 14px;
+  color: var(--accent-strong);
+  font-size: 18px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.family-sharing-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.family-sharing-content {
+  display: grid;
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+.family-sharing-content p { margin: 0; padding: 0; border: 0; background: transparent; }
+.family-sharing-content ol { margin: 0; padding-left: 24px; }
+.family-sharing-content li { line-height: 1.7; overflow-wrap: anywhere; }
+.family-sharing-content a { color: var(--accent-strong); font-weight: 700; }
 
 .maintenance-page {
   display: grid;
@@ -805,7 +814,4 @@ body[data-theme="dark"] .hotspot-times { background: #111111; }
   .section-title { display: grid; }
   .usage-modal { padding: 12px; }
   .usage-modal-card { grid-template-columns: 1fr; max-height: calc(100vh - 24px); }
-  .support-types-panel ul { grid-template-columns: 1fr; }
-  .support-unlock { grid-template-columns: 1fr; }
-  .support-password-message { grid-column: auto; }
 }

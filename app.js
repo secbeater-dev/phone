@@ -16,7 +16,6 @@
     theme: "phone-workbench-theme",
     sidebarCollapsed: "phone-workbench-sidebar-collapsed",
   };
-  const SUPPORT_PASSWORD_SHA256 = "44d987773df84d3bdb849615d9f4d37567d46759e2fbeff2809ffe403af04aef";
   const LOCAL_EXPORT_VERSION = "phone-workbench-local-settings-v1";
   const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}-${String(hour + 1).padStart(2, "0")}`);
   const CALL_COLUMNS = [
@@ -49,6 +48,8 @@
   const FET_WEB_HEADERS = ["啟始時間", "通聯時間(秒)", "結束時間", "上行用量", "下行用量", "全部用量", "基地台 ID", "最終基地台 ID", "基地台位址", "最終基地台位址", "上網IPv4", "上網IPv6", "IMEI", "IMSI", "MSISDN", "備註"];
   const TWM_CALL_PIG_HEADERS = ["通話類別", "始話時間", "調閱門號", "對象門號", "通話期間", "開始基地台編號", "開始基地台"];
   const CHT_PROSECUTOR_HEADERS = ["CDR類別", "主叫號碼", "查詢狀態", "受叫號碼", "始話日期時間", "通話秒數", "IMEI", "指定轉接", "起始基地台-地址/終止基地台-地址"];
+  const FET_PROSECUTOR_CALL_HEADERS = ["始話時間", "通話秒數", "調閱號碼", "IMEI", "通話類別", "通話對象", "轉接電話", "基地台/交換機", "備註"];
+  const FET_PROSECUTOR_METADATA_KEYS = new Set(["文號", "查詢日期", "電信業者", "通聯類別", "查詢狀態", "區段時間", "備註", "電話號碼"]);
 
   const state = {
     view: "hours",
@@ -130,13 +131,6 @@
     $("sidebarCollapseButton")?.addEventListener("click", toggleSidebarCollapsed);
     $("themeToggleButton")?.addEventListener("click", toggleTheme);
     $("noticeDismissButton")?.addEventListener("click", hideUsageNotice);
-    $("supportTypesButton")?.addEventListener("click", verifySupportPassword);
-    $("supportPasswordInput")?.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        verifySupportPassword();
-      }
-    });
     $("oneClickUpdateButton")?.addEventListener("click", runOneClickUpdate);
     $("usageNoticeModal")?.addEventListener("click", (event) => {
       if (event.target === $("usageNoticeModal")) hideUsageNotice();
@@ -194,44 +188,6 @@
   function hideUsageNotice() {
     const modal = $("usageNoticeModal");
     if (modal) modal.hidden = true;
-  }
-
-  async function verifySupportPassword() {
-    const panel = $("supportTypesPanel");
-    const button = $("supportTypesButton");
-    const input = $("supportPasswordInput");
-    const message = $("supportPasswordMessage");
-    if (!panel) return;
-    if (!panel.hidden) {
-      panel.hidden = true;
-      if (button) button.textContent = "顯示支援檔案類型";
-      if (message) message.textContent = "";
-      return;
-    }
-    const password = input?.value || "";
-    const digest = await sha256Hex(password);
-    if (digest === SUPPORT_PASSWORD_SHA256) {
-      panel.hidden = false;
-      if (button) button.textContent = "隱藏支援檔案類型";
-      if (message) {
-        message.classList.remove("danger-text");
-        message.classList.add("success-text");
-        message.textContent = "已解鎖支援檔案類型。";
-      }
-    } else if (message) {
-      const supportHelpText = "請找 Telegram 管理員領取";
-      panel.hidden = true;
-      message.classList.remove("success-text");
-      message.classList.add("danger-text");
-      message.innerHTML = `${supportHelpText.replace("Telegram", '<a href="https://t.me/secbeater" target="_blank" rel="noopener noreferrer">Telegram</a>')}。`;
-    }
-  }
-
-  async function sha256Hex(value) {
-    if (!globalThis.crypto?.subtle || typeof TextEncoder === "undefined") return "";
-    const bytes = new TextEncoder().encode(String(value || ""));
-    const hash = await globalThis.crypto.subtle.digest("SHA-256", bytes);
-    return Array.from(new Uint8Array(hash)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
   }
 
   function runOneClickUpdate() {
@@ -910,6 +866,8 @@
     }));
     const chtProsecutor = chtProsecutorHeaders(sheets);
     if (chtProsecutor) return parseChtProsecutor(fileName, sheets, chtProsecutor);
+    const fetProsecutorCall = fetProsecutorCallHeaders(sheets);
+    if (fetProsecutorCall) return parseFetProsecutorCall(fileName, sheets, fetProsecutorCall);
     const converted = convertedMultiSheetHeaders(sheets);
     if (converted) return parseConvertedMultiSheet(fileName, sheets, converted);
     const twmCallPig = twmCallPigHeaders(sheets);
@@ -990,6 +948,77 @@
       addChtStationRefs(record, stationMap, data["起始基地台-地址/終止基地台-地址"]);
       parsed.records.push(record);
     });
+    parsed.base_stations = Array.from(stationMap.values());
+    return parsed;
+  }
+
+  function parseFetProsecutorCall(fileName, sheets, firstHeader) {
+    const parsed = makeParsed({
+      fileName,
+      carrier: "遠傳電信",
+      sourceFormat: "fet_prosecutor_call_xlsx",
+      sheetName: firstHeader.sheet.title,
+      headerRow: firstHeader.rowNumber,
+      totalSourceRows: sheets.reduce((sum, sheet) => sum + sheet.rows.length, 0),
+      subject: {},
+    });
+    const subjectValues = new Map();
+    const stationMap = new Map();
+
+    sheets.forEach((sheet) => {
+      let activeHeaders = null;
+      sheet.rows.forEach((row) => {
+        const canonicalValues = row.values.map(canonicalHeaderText);
+        if (hasHeaders(canonicalValues, FET_PROSECUTOR_CALL_HEADERS)) {
+          activeHeaders = canonicalValues;
+          return;
+        }
+
+        if (isFetProsecutorMetadataRow(row.values)) {
+          mergeSubjectMetadata(subjectValues, metadataFromValuesWithAdjacent(row.values, FET_PROSECUTOR_METADATA_KEYS));
+          return;
+        }
+        if (!activeHeaders) return;
+
+        const data = rowDict(activeHeaders, row.values);
+        const rawOccurredAt = cellText(data["始話時間"]);
+        const rawCallType = cellText(data["通話類別"]);
+        const hasRecordData = [
+          rawOccurredAt,
+          data["通話秒數"],
+          data["調閱號碼"],
+          data["IMEI"],
+          rawCallType,
+          data["通話對象"],
+          data["轉接電話"],
+          data["基地台/交換機"],
+        ].some((value) => cellText(value));
+        if (!hasRecordData) return;
+
+        const occurredAt = normalizeDatetime(rawOccurredAt);
+        if (rawOccurredAt && !occurredAt) parsed.warnings.push(`第 ${row.rowNumber} 列的始話時間無法正規化，已保留原文。`);
+        const transferPhone = cellText(data["轉接電話"]);
+        const note = [
+          transferPhone ? `轉接電話：${transferPhone}` : "",
+          cellText(data["備註"]),
+        ].filter(Boolean).join("；");
+        const record = baseRecord({
+          row_number: row.rowNumber,
+          call_type: rawCallType,
+          direction: directionLabel(rawCallType),
+          occurred_at: occurredAt || rawOccurredAt,
+          duration_seconds: toInt(data["通話秒數"]),
+          target_phone: normalizePhoneText(data["調閱號碼"]),
+          counterparty_phone: normalizePhoneText(data["通話對象"]),
+          imei: cellText(data["IMEI"]),
+          note,
+        });
+        addStationCompoundRef(record, stationMap, "primary", data["基地台/交換機"]);
+        parsed.records.push(record);
+      });
+    });
+
+    parsed.subject = subjectFromValueSets(subjectValues);
     parsed.base_stations = Array.from(stationMap.values());
     return parsed;
   }
@@ -1516,6 +1545,18 @@
     return null;
   }
 
+  function fetProsecutorCallHeaders(sheets) {
+    for (const sheet of sheets) {
+      for (const row of sheet.rows.slice(0, 80)) {
+        const headers = row.values.map(canonicalHeaderText);
+        if (hasHeaders(headers, FET_PROSECUTOR_CALL_HEADERS)) {
+          return { sheet, rowNumber: row.rowNumber, headers };
+        }
+      }
+    }
+    return null;
+  }
+
   function canonicalHeaderText(value) {
     return cellText(value).replace(/\s+/g, "");
   }
@@ -1689,6 +1730,51 @@
       metadata[key.trim()] = rest.join(":").trim();
     });
     return metadata;
+  }
+
+  function isFetProsecutorMetadataRow(values) {
+    return values.slice(0, 3).some((value) => {
+      const match = cellText(value).match(/^([^:：]+)\s*[:：]/);
+      return Boolean(match && FET_PROSECUTOR_METADATA_KEYS.has(canonicalHeaderText(match[1])));
+    });
+  }
+
+  function metadataFromValuesWithAdjacent(values, allowedKeys) {
+    const metadata = {};
+    values.forEach((value, index) => {
+      const text = cellText(value);
+      const match = text.match(/^([^:：]+)\s*[:：]\s*(.*)$/);
+      if (!match) return;
+      const key = canonicalHeaderText(match[1]);
+      if (!allowedKeys.has(key)) return;
+      let metadataValue = cellText(match[2]);
+      if (!metadataValue) {
+        for (const candidate of values.slice(index + 1)) {
+          const candidateText = cellText(candidate);
+          if (!candidateText) continue;
+          const candidateMatch = candidateText.match(/^([^:：]+)\s*[:：]/);
+          if (candidateMatch && allowedKeys.has(canonicalHeaderText(candidateMatch[1]))) break;
+          metadataValue = candidateText;
+          break;
+        }
+      }
+      if (metadataValue) metadata[key] = metadataValue;
+    });
+    return metadata;
+  }
+
+  function mergeSubjectMetadata(subjectValues, metadata) {
+    Object.entries(metadata).forEach(([key, value]) => {
+      const text = cellText(value);
+      if (!text) return;
+      const values = subjectValues.get(key) || new Set();
+      values.add(text);
+      subjectValues.set(key, values);
+    });
+  }
+
+  function subjectFromValueSets(subjectValues) {
+    return Object.fromEntries(Array.from(subjectValues, ([key, values]) => [key, Array.from(values).join("、")]));
   }
 
   function targetPhoneFromSubject(subject) {
