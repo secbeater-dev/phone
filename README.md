@@ -13,7 +13,7 @@ This GitHub Pages build runs fully in the browser. Imported files are parsed loc
 - Supports the Far EasTone prosecutor-office call XLSX layout, including repeated query sections and spacer-column variants.
 - Merge every successfully parsed file selected in one import batch, retain each record's source, and replace the current batch only after a new batch has at least one success.
 - Review the complete call list with 500-row pagination, subject metadata, time distribution, phone statistics, and submission CSV output.
-- Filter hotspot addresses by any combination of Taiwan's 22 current counties/cities plus an unrecognized-address category; 台 and 臺 are classified together.
+- Filter hotspot addresses by any combination of Taiwan's 22 current counties/cities plus an unrecognized-address category; 台 and 臺 are classified together, with bulk select and clear controls.
 - Export a local attachment package: one six-sheet XLSX or six searchable-text PDFs covering time distribution, hotspots, calls, profile data, and count/seconds phone rankings.
 - Export/import local browser settings and export parsed workspace JSON.
 - `/admin.html` and missing routes show a maintenance notice.

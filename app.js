@@ -19,10 +19,10 @@
   const LOCAL_EXPORT_VERSION = "phone-workbench-local-settings-v1";
   const CALL_PAGE_SIZE = 500;
   const ATTACHMENT_ASSETS = {
-    exceljs: { src: "./vendor/exceljs.min.js?v=20260729-county-filter-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
-    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260729-county-filter-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
-    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260729-county-filter-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
-    fontData: { src: "./vendor/open-huninn-data.js?v=20260729-county-filter-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
+    exceljs: { src: "./vendor/exceljs.min.js?v=20260729-county-bulk-select-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
+    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260729-county-bulk-select-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
+    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260729-county-bulk-select-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
+    fontData: { src: "./vendor/open-huninn-data.js?v=20260729-county-bulk-select-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
   };
   const loadedAttachmentAssets = new Map();
   const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}-${String(hour + 1).padStart(2, "0")}`);
@@ -139,7 +139,8 @@
     $("hotspotCountyFilterButton")?.addEventListener("click", showHotspotCountyFilterModal);
     $("hotspotCountyFilterCloseButton")?.addEventListener("click", hideHotspotCountyFilterModal);
     $("hotspotCountyFilterCancelButton")?.addEventListener("click", hideHotspotCountyFilterModal);
-    $("hotspotCountyFilterResetButton")?.addEventListener("click", resetHotspotCountyFilterDraft);
+    $("hotspotCountySelectAllButton")?.addEventListener("click", selectAllHotspotCountyDraft);
+    $("hotspotCountyClearAllButton")?.addEventListener("click", clearAllHotspotCountyDraft);
     $("hotspotCountyFilterApplyButton")?.addEventListener("click", applyHotspotCountyFilter);
     $("hotspotCountyFilterList")?.addEventListener("change", handleHotspotCountyDraftChange);
     $("hotspotCountyFilterModal")?.addEventListener("click", (event) => {
@@ -809,8 +810,13 @@
     }
   }
 
-  function resetHotspotCountyFilterDraft() {
+  function selectAllHotspotCountyDraft() {
     state.hotspotCountyDraft = new Set(ALL_COUNTY_FILTER_KEYS);
+    renderHotspotCountyFilterModal();
+  }
+
+  function clearAllHotspotCountyDraft() {
+    state.hotspotCountyDraft = new Set();
     renderHotspotCountyFilterModal();
   }
 

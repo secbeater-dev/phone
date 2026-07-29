@@ -787,10 +787,17 @@ body[data-theme="dark"] .hotspot-times { background: #111111; }
 .county-filter-percent { font-variant-numeric: tabular-nums; }
 .county-filter-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px;
 }
+.county-filter-bulk-actions,
+.county-filter-commit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.county-filter-commit-actions { justify-content: flex-end; }
 .usage-summary {
   display: grid;
   gap: 8px;
@@ -965,6 +972,7 @@ body[data-theme="dark"] .hotspot-times { background: #111111; }
   .county-filter-heading { display: grid; }
   .county-filter-table-head,
   .county-filter-row { grid-template-columns: minmax(118px, 1fr) 64px 64px; }
+  .county-filter-actions > div { flex: 1 1 100%; }
   .attachment-export-card { max-height: calc(100vh - 24px); }
   .attachment-export-heading { display: grid; }
   .attachment-pdf-grid { grid-template-columns: 1fr; }

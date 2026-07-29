@@ -312,7 +312,12 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   assert.match(html, /熱點時間摘要新增縣市統計與快速篩選/);
   assert.match(html, /id="hotspotCountyFilterButton" class="county-filter-button"/);
   assert.match(html, /id="hotspotCountyFilterModal"[^>]+role="dialog"[^>]+aria-modal="true"/);
-  assert.match(html, /回復預設/);
+  assert.match(html, /id="hotspotCountySelectAllButton"[^>]*>全選<\/button>/);
+  assert.match(html, /id="hotspotCountyClearAllButton"[^>]*>全部取消<\/button>/);
+  assert.doesNotMatch(html, /回復預設|hotspotCountyFilterResetButton/);
+  assert.match(appSource, /selectAllHotspotCountyDraft/);
+  assert.match(appSource, /clearAllHotspotCountyDraft/);
+  assert.match(appSource, /state\.hotspotCountyDraft = new Set\(\);/);
   assert.match(appSource, /const TAIWAN_COUNTIES = \[/);
   assert.match(appSource, /hotspotCountySelection: new Set\(ALL_COUNTY_FILTER_KEYS\)/);
   assert.doesNotMatch(appSource, /phone-workbench-hotspot-county/);
@@ -334,14 +339,14 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   for (const relativePath of ["vendor/xlsx.full.min.js", "attachment-export.js", "app.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
-    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=20260729-county-filter-v1"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=20260729-county-bulk-select-v1"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
     assert.ok(html.includes(`'${sri}'`));
   }
   for (const relativePath of ["vendor/exceljs.min.js", "vendor/pdf-lib.min.js", "vendor/fontkit.umd.min.js", "vendor/open-huninn-data.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
     assert.ok(html.includes(`'${sri}'`));
-    assert.ok(appSource.includes(`./${relativePath}?v=20260729-county-filter-v1`));
+    assert.ok(appSource.includes(`./${relativePath}?v=20260729-county-bulk-select-v1`));
     assert.ok(appSource.includes(sri));
   }
   assert.match(html, /connect-src 'none'/);
