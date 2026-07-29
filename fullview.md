@@ -40,7 +40,7 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 
 ## 3. 載入順序
 
-1. `index.html` 建立側欄、六個 view、匯入控制、附卷匯出視窗與使用提醒；提醒中的「今日重點」列出目前發布的使用者可見更新，Gemini 區塊使用原生 `details` 顯示家庭分享教學。
+1. `index.html` 建立側欄、六個 view、匯入控制、熱點縣市篩選視窗、附卷匯出視窗與使用提醒；提醒中的「今日重點」列出目前發布的使用者可見更新，Gemini 區塊使用原生 `details` 顯示家庭分享教學。
 2. 瀏覽器透過固定發布版本查詢字串載入 `vendor/xlsx.full.min.js`、`attachment-export.js` 與 `app.js`，驗證 SHA-384 SRI 後依序執行；版本字串避免舊快取與新 SRI 衝突，CSP 不允許其他 script。
 3. `app.js` 與 `attachment-export.js` 均以 UMD 包裝，可供瀏覽器及 Node 測試使用。只有使用者按下附卷下載時，`app.js` 才以固定版本路徑與 SRI 延遲載入 ExcelJS，或依序載入 pdf-lib、fontkit 與字型資料。
 4. `DOMContentLoaded` 執行 `init()`，還原偏好、綁定事件並渲染所有 view。
@@ -53,7 +53,8 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 - `cases`、`currentWorkspace`、`callRecords`：案件、workspace 與標準化記錄。
 - `callSort`、`callPage`、`callColumnWidths`：列表排序、500 筆分頁及欄寬。
 - `phoneStatsRankMode`、`phoneNotes`：排行模式與電話備註。
-- `hourSelection`、`appliedHourSelection`、`expandedHotspotAddress`：時段與熱點狀態。
+- `hourSelection`、`appliedHourSelection`、`expandedHotspotAddress`：時段與展開中熱點狀態。
+- `hotspotCountySelection`、`hotspotCountyDraft`：目前套用及彈窗草稿的縣市條件；預設包含現行 22 縣市及「未辨識」，只存在記憶體且新 workspace 匯入時重設。
 - `theme`、`sidebarCollapsed`：介面偏好。
 
 ## 5. 匯入與格式判定
@@ -135,7 +136,7 @@ XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版�
 - `renderTwoWayCalls`：顯示來源檔案、通聯搜尋、全資料排序、欄寬、備註與每頁 500 筆分頁；搜尋或排序條件改變時回到第一頁，沒有靜默筆數截斷。
 - `renderProfileView`：案件摘要、subject 與 IMEI 清單。
 - `renderStatsView`：依明確或衍生方向統計來電、去電及完整排行；三種排行均顯示全部電話，不截斷前 20 名。
-- `renderHoursView`：24 小時分布、時段篩選及基地台熱點。
+- `renderHoursView`：24 小時分布、時段篩選及基地台熱點。熱點搜尋右側的綠色齒輪開啟縣市篩選；使用者可在現行 22 縣市及「未辨識」間多選，按套用後只過濾熱點列表，取消、背景點擊或 Escape 會放棄草稿，回復預設也必須再按套用才生效。空選取時禁止套用。
 - `renderSubmissionPreview`：電話驗證、去重、投單預覽與 CSV。
 - `renderExportView`：workspace JSON 與本機設定匯出；入口位於側欄下方工具區，切換後顯示選取狀態。
 - 主功能導覽「附卷檔案匯出」：開啟含進度與錯誤狀態的視窗，不切換目前 view；沒有 workspace/records 時停用下載。
@@ -143,9 +144,11 @@ XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版�
 
 匯入值進入 HTML 字串前由 `escapeHtml` 處理。電話只以 `.phone-value` 純文字顯示，不產生外部查詢連結。下載由 `Blob`、`URL.createObjectURL` 與 `download` 屬性在本機完成，觸發後撤銷 Object URL。
 
+熱點縣市分類會先移除地址空白並將「台」統一為「臺」，再依固定現行縣市名稱判定；非空、非虛擬且無法判定者歸入「未辨識」，畫面仍顯示來源地址原文。縣市統計沿用 `computeAddressHotspots` 的逐通聯地址去重結果，比例分母為目前已套用時段內所有縣市及未辨識的地址出現次數；統計基準不讀取地址搜尋字串或已套用縣市條件，因此篩選後總數與比例不會自行改變。地址文字搜尋與縣市條件在呈現熱點清單時取交集。
+
 ### 附卷資料流
 
-`buildAttachmentReport` 永遠由完整 `currentWorkspace.records` 建立報表模型，不讀取目前通聯搜尋、頁碼、熱點搜尋或時段篩選。報表模型包含完整 24 小時桶、全部基地台熱點及其發生時間、全部通聯與來源、合併後用戶欄位與 IMEI，以及附帶瀏覽器電話備註的次數/秒數排行。
+`buildAttachmentReport` 永遠由完整 `currentWorkspace.records` 建立報表模型，不讀取目前通聯搜尋、頁碼、熱點搜尋、縣市條件或時段篩選。報表模型包含完整 24 小時桶、全部基地台熱點及其發生時間、全部通聯與來源、合併後用戶欄位與 IMEI，以及附帶瀏覽器電話備註的次數/秒數排行。
 
 - XLSX：ExcelJS 產生 `時間分布圖`、`熱點時間摘要`、`通聯列表`、`用戶資料`、`電話統計-次數版`、`電話統計-秒數版` 六張工作表。使用凍結表頭、自動篩選、欄寬、換行及列印設定，時間頁另嵌入瀏覽器 canvas 產生的長條圖。電話、IMEI、來源及備註都以 ExcelJS 純字串型別寫入；即使內容以公式符號開頭也不建立 formula，避免前導零遺失與公式注入。
 - PDF：pdf-lib、fontkit 與 OFL 授權的 jf open 粉圓產生六份獨立檔案。表格可跨頁並在新頁重複表頭；每頁有頁碼。中文與識別欄位使用嵌入字型的文字指令，因此可搜尋與複製，不是畫面截圖。pdf-lib/fontkit 對繁中 TTF 啟用子集化時會造成部分檢視器字形映射毀損，因此完整嵌入較精簡的字型檔，以跨檢視器可讀性優先。
@@ -169,7 +172,7 @@ XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版�
 
 ## 10. 測試
 
-`node --test tests/app.test.js` 使用記憶體內合成 XLSX，涵蓋：中華電信空白標題、用戶資料、主叫/受叫/進來 CDR、調閱門號不在該列、無效日期、IMEI、指定轉接與雙基地台；遠傳地檢新版另涵蓋九欄、空白佔位欄、重複查詢區段、內嵌/相鄰案件資料、缺少通話對象、轉接、備註、基地台續行與重複續行。另測試多檔合併、來源追蹤、subject 去重、舊 workspace 相容、既有台灣大哥大解析、電話方向、完整排行、六張 XLSX 工作表、文字/公式安全、六種 PDF、彈窗文字、指定連結、HTML 無 Google/Tellows，以及靜態/延遲載入資產的 SRI 與檔案雜湊一致。
+`node --test tests/app.test.js` 使用記憶體內合成 XLSX，涵蓋：中華電信空白標題、用戶資料、主叫/受叫/進來 CDR、調閱門號不在該列、無效日期、IMEI、指定轉接與雙基地台；遠傳地檢新版另涵蓋九欄、空白佔位欄、重複查詢區段、內嵌/相鄰案件資料、缺少通話對象、轉接、備註、基地台續行與重複續行。另測試多檔合併、來源追蹤、subject 去重、舊 workspace 相容、既有台灣大哥大解析、電話方向、完整排行、22 縣市與台/臺分類、未辨識、零資料、逐通聯地址去重、縣市比例、六張 XLSX 工作表、文字/公式安全、六種 PDF、彈窗文字、指定連結、HTML 無 Google/Tellows，以及靜態/延遲載入資產的 SRI 與檔案雜湊一致。
 
 設定 `PRIVATE_CDR_XLSX` 時會啟用 repository 外中華電信真實檔整合測試；設定 `PRIVATE_FET_XLSX` 時會啟用 repository 外遠傳真實檔整合測試。兩者只斷言格式、有效來源列完整性、方向及標準介面，不輸出資料內容。真實兩檔的合併與附卷驗證也只回報各階段通過/失敗，不留下產物。合成 XLSX 另以試算表工具檢查/渲染六張工作表；六份合成 PDF 以 Poppler 渲染及抽取文字，確認換頁、表頭、中文文字與可搜尋性。瀏覽器煙霧測試只使用合成資料，檢查六個 view、分頁、附卷視窗、下載與零非預期第三方請求。
 
@@ -187,7 +190,7 @@ XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版�
 
 ## 12. Node 匯出介面
 
-`app.js` 輸出：`parseImportFile`、`mergeWorkspaces`、`normalizeWorkspace`、`buildAttachmentReport`、`computePhoneStats`、`computeHourBuckets`、`computeAddressHotspots`、`buildSubmissionCsv`、`collectSubmissionPhones`、`collectUniqueImeis`、`normalizePhoneText`、`tellowsUrl`（僅相容舊程式碼，畫面不使用）、`hourButtonLabel`。`attachment-export.js` 輸出六張工作表/六種 PDF 定義、`createAttachmentXlsx`、`createAttachmentPdf` 與 `safeText`。
+`app.js` 輸出：`parseImportFile`、`mergeWorkspaces`、`normalizeWorkspace`、`buildAttachmentReport`、`computePhoneStats`、`computeHourBuckets`、`computeAddressHotspots`、`classifyTaiwanCounty`、`computeTaiwanCountyStats`、`buildSubmissionCsv`、`collectSubmissionPhones`、`collectUniqueImeis`、`normalizePhoneText`、`tellowsUrl`（僅相容舊程式碼，畫面不使用）、`hourButtonLabel`。`attachment-export.js` 輸出六張工作表/六種 PDF 定義、`createAttachmentXlsx`、`createAttachmentPdf` 與 `safeText`。
 
 ## 13. 維護檢查表
 
@@ -207,3 +210,4 @@ XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版�
 - 2026-07-26：正式站驗證發現舊瀏覽器快取可能與新版 SRI 衝突，為靜態與延遲載入 script 加入固定發布版本查詢字串；CSP 雜湊限制維持不變。
 - 2026-07-26：互換「附卷檔案匯出」與「資料匯出」的側欄位置；附卷改為主導覽動作，資料匯出改為下方工具區 view 入口。
 - 2026-07-26：移除附卷視窗及下載完成訊息中的指定個資提醒文字；更新使用提醒為多檔案匯入說明，並加入更多支援類型 Notion 連結。
+- 2026-07-29：熱點時間摘要新增現行 22 縣市與「未辨識」的總數、比例及多選快速篩選；台/臺統一分類，條件只影響熱點列表且不寫入 localStorage 或附卷。

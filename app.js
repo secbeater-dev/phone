@@ -19,10 +19,10 @@
   const LOCAL_EXPORT_VERSION = "phone-workbench-local-settings-v1";
   const CALL_PAGE_SIZE = 500;
   const ATTACHMENT_ASSETS = {
-    exceljs: { src: "./vendor/exceljs.min.js?v=20260726-notice-copy-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
-    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260726-notice-copy-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
-    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260726-notice-copy-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
-    fontData: { src: "./vendor/open-huninn-data.js?v=20260726-notice-copy-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
+    exceljs: { src: "./vendor/exceljs.min.js?v=20260729-county-filter-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
+    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260729-county-filter-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
+    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260729-county-filter-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
+    fontData: { src: "./vendor/open-huninn-data.js?v=20260729-county-filter-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
   };
   const loadedAttachmentAssets = new Map();
   const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}-${String(hour + 1).padStart(2, "0")}`);
@@ -59,6 +59,12 @@
   const CHT_PROSECUTOR_HEADERS = ["CDR類別", "主叫號碼", "查詢狀態", "受叫號碼", "始話日期時間", "通話秒數", "IMEI", "指定轉接", "起始基地台-地址/終止基地台-地址"];
   const FET_PROSECUTOR_CALL_HEADERS = ["始話時間", "通話秒數", "調閱號碼", "IMEI", "通話類別", "通話對象", "轉接電話", "基地台/交換機", "備註"];
   const FET_PROSECUTOR_METADATA_KEYS = new Set(["文號", "查詢日期", "電信業者", "通聯類別", "查詢狀態", "區段時間", "備註", "電話號碼"]);
+  const TAIWAN_COUNTIES = [
+    "臺北市", "新北市", "桃園市", "臺中市", "臺南市", "高雄市", "基隆市", "新竹市", "嘉義市", "新竹縣", "苗栗縣",
+    "彰化縣", "南投縣", "雲林縣", "嘉義縣", "屏東縣", "宜蘭縣", "花蓮縣", "臺東縣", "澎湖縣", "金門縣", "連江縣",
+  ];
+  const UNKNOWN_COUNTY = "未辨識";
+  const ALL_COUNTY_FILTER_KEYS = [...TAIWAN_COUNTIES, UNKNOWN_COUNTY];
 
   const state = {
     view: "hours",
@@ -71,6 +77,8 @@
     hourSelection: new Set(Array.from({ length: 24 }, (_, index) => index)),
     appliedHourSelection: new Set(Array.from({ length: 24 }, (_, index) => index)),
     expandedHotspotAddress: "",
+    hotspotCountySelection: new Set(ALL_COUNTY_FILTER_KEYS),
+    hotspotCountyDraft: new Set(ALL_COUNTY_FILTER_KEYS),
     phoneNotes: {},
     callColumnWidths: {},
     theme: "light",
@@ -90,6 +98,7 @@
     setSubmissionDefaults();
     renderHourTiles();
     renderAllViews();
+    syncHotspotCountyFilterButton();
     initCallColumnResize();
     maybeShowUsageNotice();
   }
@@ -127,6 +136,15 @@
       if (input) updatePhoneNote(input.dataset.phoneNote, input.value, input);
     });
     $("hourHotspotSearch")?.addEventListener("input", () => renderHourHotspots(filteredHourRecords()));
+    $("hotspotCountyFilterButton")?.addEventListener("click", showHotspotCountyFilterModal);
+    $("hotspotCountyFilterCloseButton")?.addEventListener("click", hideHotspotCountyFilterModal);
+    $("hotspotCountyFilterCancelButton")?.addEventListener("click", hideHotspotCountyFilterModal);
+    $("hotspotCountyFilterResetButton")?.addEventListener("click", resetHotspotCountyFilterDraft);
+    $("hotspotCountyFilterApplyButton")?.addEventListener("click", applyHotspotCountyFilter);
+    $("hotspotCountyFilterList")?.addEventListener("change", handleHotspotCountyDraftChange);
+    $("hotspotCountyFilterModal")?.addEventListener("click", (event) => {
+      if (event.target === $("hotspotCountyFilterModal")) hideHotspotCountyFilterModal();
+    });
     $("hourSelectAll")?.addEventListener("click", () => {
       state.hourSelection = new Set(Array.from({ length: 24 }, (_, index) => index));
       renderHourTiles();
@@ -160,7 +178,9 @@
       if (event.target === $("usageNoticeModal")) hideUsageNotice();
     });
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && !$("attachmentExportModal")?.hidden) hideAttachmentExportModal();
+      if (event.key !== "Escape") return;
+      if (!$("hotspotCountyFilterModal")?.hidden) hideHotspotCountyFilterModal();
+      else if (!$("attachmentExportModal")?.hidden) hideAttachmentExportModal();
     });
     document.addEventListener("pointermove", handleCallColumnResizeMove);
     document.addEventListener("pointerup", handleCallColumnResizeEnd);
@@ -335,6 +355,9 @@
     state.callRecords = normalized?.records || [];
     state.callPage = 1;
     state.expandedHotspotAddress = "";
+    state.hotspotCountySelection = new Set(ALL_COUNTY_FILTER_KEYS);
+    state.hotspotCountyDraft = new Set(ALL_COUNTY_FILTER_KEYS);
+    syncHotspotCountyFilterButton();
     prefillSubmissionPhones(state.callRecords);
     renderAllViews();
   }
@@ -712,9 +735,10 @@
   function renderHourHotspots(records) {
     const query = ($("hourHotspotSearch")?.value || "").trim().toLowerCase();
     const hotspots = computeAddressHotspots(records, state.currentWorkspace?.base_stations || []);
+    const countyFiltered = hotspots.filter((item) => state.hotspotCountySelection.has(classifyTaiwanCounty(item.address)));
     const filtered = query
-      ? hotspots.filter((item) => [item.address, item.first_seen, item.last_seen, ...item.times].some((value) => String(value || "").toLowerCase().includes(query)))
-      : hotspots;
+      ? countyFiltered.filter((item) => [item.address, item.first_seen, item.last_seen, ...item.times].some((value) => String(value || "").toLowerCase().includes(query)))
+      : countyFiltered;
     $("hourHotspotContent").innerHTML = filtered.length
       ? filtered.slice(0, 20).map((item) => hotspotItemHtml(item)).join("")
       : `<p class="muted">尚無符合資料。</p>`;
@@ -732,6 +756,81 @@
         }
       });
     });
+  }
+
+  function showHotspotCountyFilterModal() {
+    const modal = $("hotspotCountyFilterModal");
+    if (!modal) return;
+    state.hotspotCountyDraft = new Set(state.hotspotCountySelection);
+    renderHotspotCountyFilterModal();
+    modal.hidden = false;
+    $("hotspotCountyFilterButton")?.setAttribute("aria-expanded", "true");
+    $("hotspotCountyFilterCloseButton")?.focus();
+  }
+
+  function hideHotspotCountyFilterModal() {
+    const modal = $("hotspotCountyFilterModal");
+    if (!modal || modal.hidden) return;
+    state.hotspotCountyDraft = new Set(state.hotspotCountySelection);
+    modal.hidden = true;
+    $("hotspotCountyFilterButton")?.setAttribute("aria-expanded", "false");
+    $("hotspotCountyFilterButton")?.focus();
+  }
+
+  function renderHotspotCountyFilterModal() {
+    const list = $("hotspotCountyFilterList");
+    if (!list) return;
+    const hotspots = computeAddressHotspots(filteredHourRecords(), state.currentWorkspace?.base_stations || []);
+    const rows = computeTaiwanCountyStats(hotspots);
+    list.innerHTML = rows.map((row) => `<label class="county-filter-row">
+      <span class="county-filter-name"><input type="checkbox" data-county-filter="${escapeHtml(row.county)}" ${state.hotspotCountyDraft.has(row.county) ? "checked" : ""} /><span>${escapeHtml(row.county)}</span></span>
+      <span class="county-filter-count">${row.count.toLocaleString()}</span>
+      <span class="county-filter-percent">${formatPercent(row.percent)}</span>
+    </label>`).join("");
+    syncHotspotCountyFilterDraftUi();
+  }
+
+  function handleHotspotCountyDraftChange(event) {
+    const checkbox = event.target.closest("[data-county-filter]");
+    if (!checkbox) return;
+    if (checkbox.checked) state.hotspotCountyDraft.add(checkbox.dataset.countyFilter);
+    else state.hotspotCountyDraft.delete(checkbox.dataset.countyFilter);
+    syncHotspotCountyFilterDraftUi();
+  }
+
+  function syncHotspotCountyFilterDraftUi() {
+    const selected = state.hotspotCountyDraft.size;
+    const applyButton = $("hotspotCountyFilterApplyButton");
+    if (applyButton) applyButton.disabled = selected === 0;
+    const status = $("hotspotCountyFilterStatus");
+    if (status) {
+      status.textContent = selected ? `已選取 ${selected} 個分類。` : "請至少選擇一個縣市或未辨識。";
+      status.classList.toggle("danger-text", selected === 0);
+    }
+  }
+
+  function resetHotspotCountyFilterDraft() {
+    state.hotspotCountyDraft = new Set(ALL_COUNTY_FILTER_KEYS);
+    renderHotspotCountyFilterModal();
+  }
+
+  function applyHotspotCountyFilter() {
+    if (!state.hotspotCountyDraft.size) return;
+    state.hotspotCountySelection = new Set(state.hotspotCountyDraft);
+    state.expandedHotspotAddress = "";
+    renderHourHotspots(filteredHourRecords());
+    syncHotspotCountyFilterButton();
+    hideHotspotCountyFilterModal();
+  }
+
+  function syncHotspotCountyFilterButton() {
+    const button = $("hotspotCountyFilterButton");
+    if (!button) return;
+    const selected = state.hotspotCountySelection.size;
+    const allSelected = selected === ALL_COUNTY_FILTER_KEYS.length;
+    button.classList.toggle("filtered", !allSelected);
+    button.setAttribute("aria-label", allSelected ? "縣市篩選，已選取全部分類" : `縣市篩選，已選取 ${selected} 個分類`);
+    button.title = allSelected ? "縣市篩選（全部）" : `縣市篩選（已選 ${selected}）`;
   }
 
   function hotspotItemHtml(item) {
@@ -2332,6 +2431,26 @@
     return buckets;
   }
 
+  function classifyTaiwanCounty(address) {
+    const normalized = cellText(address).replace(/\s+/g, "").replace(/台/g, "臺");
+    return TAIWAN_COUNTIES.find((county) => normalized.includes(county)) || UNKNOWN_COUNTY;
+  }
+
+  function computeTaiwanCountyStats(hotspots) {
+    const counts = new Map(ALL_COUNTY_FILTER_KEYS.map((county) => [county, 0]));
+    (hotspots || []).forEach((hotspot) => {
+      const county = classifyTaiwanCounty(hotspot?.address);
+      const count = Number(hotspot?.count || 0);
+      if (Number.isFinite(count) && count > 0) counts.set(county, counts.get(county) + count);
+    });
+    const total = Array.from(counts.values()).reduce((sum, count) => sum + count, 0);
+    return ALL_COUNTY_FILTER_KEYS.map((county) => ({
+      county,
+      count: counts.get(county) || 0,
+      percent: total ? ((counts.get(county) || 0) / total) * 100 : 0,
+    }));
+  }
+
   function computeAddressHotspots(records, stations) {
     const stationMap = new Map();
     (stations || []).forEach((station) => {
@@ -2561,6 +2680,8 @@
     computePhoneStats,
     computeHourBuckets,
     computeAddressHotspots,
+    classifyTaiwanCounty,
+    computeTaiwanCountyStats,
     buildSubmissionCsv,
     collectSubmissionPhones,
     collectUniqueImeis,

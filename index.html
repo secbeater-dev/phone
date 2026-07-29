@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT' 'sha384-0bvIQoA6vO2bPEvCiRUrXiHjHI1/87vg7486XIcual9H8Ay2Ws1btD2gvWOOD4ne' 'sha384-X0HAWQfEf4zik2W7tF0QzmNrTQvFS0/JRbDgbTYU7nYsOHau6yP+jaUhZLSjLm3k' 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' 'sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn' 'sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'; media-src 'none'; manifest-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT' 'sha384-0bvIQoA6vO2bPEvCiRUrXiHjHI1/87vg7486XIcual9H8Ay2Ws1btD2gvWOOD4ne' 'sha384-Jz/D+FcgZRPmaPfHEYmy6npwBeHCaNCn7nccFniOiMLWv9D5jGtjqA8qK7B2WKPR' 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' 'sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn' 'sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'; media-src 'none'; manifest-src 'none'" />
     <title>通聯資料分析工具</title>
     <link rel="icon" type="image/png" href="./assets/Beater_icon.png" />
     <link rel="stylesheet" href="./styles.css" />
@@ -77,7 +77,12 @@
                   <h3>熱點時間摘要</h3>
                   <p class="muted">列出目前篩選後資料中最常出現的基地台地址。</p>
                 </div>
-                <input id="hourHotspotSearch" class="search-input" type="search" placeholder="搜尋基地台地址或時間" />
+                <div class="hotspot-filter-controls">
+                  <input id="hourHotspotSearch" class="search-input" type="search" placeholder="搜尋基地台地址或時間" />
+                  <button id="hotspotCountyFilterButton" class="county-filter-button" type="button" aria-label="縣市篩選，已選取全部分類" aria-controls="hotspotCountyFilterModal" aria-expanded="false" title="縣市篩選（全部）">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.4 15 .1 2.1-2.4 2.4-2.1-.1-1.5 1.5H10L8.5 19.4l-2.1.1L4 17.1l.1-2.1-1.5-1.5V10l1.5-1.5L4 6.4 6.4 4l2.1.1L10 2.6h3.5L15 4.1l2.1-.1 2.4 2.4-.1 2.1 1.5 1.5v3.5L19.4 15Z"/></svg>
+                  </button>
+                </div>
               </div>
               <div id="hourHotspotContent" class="hotspot-list"></div>
             </section>
@@ -193,6 +198,25 @@
         </section>
       </main>
     </div>
+    <section id="hotspotCountyFilterModal" class="usage-modal" role="dialog" aria-modal="true" aria-labelledby="hotspotCountyFilterTitle" hidden>
+      <div class="county-filter-card">
+        <div class="county-filter-heading">
+          <div>
+            <h2 id="hotspotCountyFilterTitle">縣市篩選</h2>
+            <p class="muted">統計以目前套用時段為準，可多選後套用至熱點列表。</p>
+          </div>
+          <button id="hotspotCountyFilterCloseButton" class="ghost-button compact-action" type="button" aria-label="關閉縣市篩選">關閉</button>
+        </div>
+        <div class="county-filter-table-head" aria-hidden="true"><span>縣市</span><span>總數</span><span>比例</span></div>
+        <div id="hotspotCountyFilterList" class="county-filter-list" role="group" aria-label="縣市選項"></div>
+        <p id="hotspotCountyFilterStatus" class="message" role="status" aria-live="polite"></p>
+        <div class="county-filter-actions">
+          <button id="hotspotCountyFilterResetButton" class="secondary-button" type="button">回復預設</button>
+          <button id="hotspotCountyFilterCancelButton" class="secondary-button" type="button">取消</button>
+          <button id="hotspotCountyFilterApplyButton" class="primary-button" type="button">套用</button>
+        </div>
+      </div>
+    </section>
     <section id="attachmentExportModal" class="usage-modal" role="dialog" aria-modal="true" aria-labelledby="attachmentExportTitle" hidden>
       <div class="attachment-export-card">
         <div class="attachment-export-heading">
@@ -231,8 +255,9 @@
             <p>任何問題歡迎於 <a href="https://t.me/secbeater" target="_blank" rel="noopener noreferrer">Telegram</a> 中提出。</p>
           </div>
           <section class="notice-focus">
-            <h3>今日重點（2026-07-26）</h3>
+            <h3>今日重點（2026-07-29）</h3>
             <ul class="notice-list">
+              <li>熱點時間摘要新增縣市統計與快速篩選，可合併辨識「台／臺」並多選分析。</li>
               <li>新增多檔案匯入功能，選取多份 XLSX 時會完整合併至通聯列表。</li>
               <li>新增附卷檔案匯出，可下載六分頁 XLSX 與六種可搜尋 PDF。</li>
               <li>調整側欄入口：附卷檔案匯出移至主功能導覽，資料匯出移至下方工具區。</li>
@@ -268,8 +293,8 @@
         </aside>
       </div>
     </section>
-    <script src="./vendor/xlsx.full.min.js?v=20260726-notice-copy-v1" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
-    <script src="./attachment-export.js?v=20260726-notice-copy-v1" integrity="sha384-0bvIQoA6vO2bPEvCiRUrXiHjHI1/87vg7486XIcual9H8Ay2Ws1btD2gvWOOD4ne" crossorigin="anonymous"></script>
-    <script src="./app.js?v=20260726-notice-copy-v1" integrity="sha384-X0HAWQfEf4zik2W7tF0QzmNrTQvFS0/JRbDgbTYU7nYsOHau6yP+jaUhZLSjLm3k" crossorigin="anonymous"></script>
+    <script src="./vendor/xlsx.full.min.js?v=20260729-county-filter-v1" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
+    <script src="./attachment-export.js?v=20260729-county-filter-v1" integrity="sha384-0bvIQoA6vO2bPEvCiRUrXiHjHI1/87vg7486XIcual9H8Ay2Ws1btD2gvWOOD4ne" crossorigin="anonymous"></script>
+    <script src="./app.js?v=20260729-county-filter-v1" integrity="sha384-Jz/D+FcgZRPmaPfHEYmy6npwBeHCaNCn7nccFniOiMLWv9D5jGtjqA8qK7B2WKPR" crossorigin="anonymous"></script>
   </body>
 </html>

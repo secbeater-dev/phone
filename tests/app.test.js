@@ -252,6 +252,44 @@ test("phone statistics preserve every ranked phone beyond the former top 20 limi
   assert.doesNotMatch(source, /rows\.slice\(0,\s*20\)\.map/);
 });
 
+test("classifies all 22 Taiwan counties, merges 台 and 臺, and keeps unknown addresses", () => {
+  const counties = [
+    "臺北市", "新北市", "桃園市", "臺中市", "臺南市", "高雄市", "基隆市", "新竹市", "嘉義市", "新竹縣", "苗栗縣",
+    "彰化縣", "南投縣", "雲林縣", "嘉義縣", "屏東縣", "宜蘭縣", "花蓮縣", "臺東縣", "澎湖縣", "金門縣", "連江縣",
+  ];
+  counties.forEach((county) => {
+    const address = ` 中華民國 ${county.replace(/臺/g, "台")} 合成路 1 號 `;
+    assert.equal(PhoneWorkbench.classifyTaiwanCounty(address), county);
+  });
+  assert.equal(PhoneWorkbench.classifyTaiwanCounty("無法辨識的合成地址"), "未辨識");
+});
+
+test("county statistics use deduplicated hotspot occurrences and a stable denominator", () => {
+  const records = [
+    { occurred_at: "2026-07-29T01:00:00", base_refs: [{ station_key: "a" }, { station_key: "b" }] },
+    { occurred_at: "2026-07-29T02:00:00", base_refs: [{ station_key: "a" }] },
+    { occurred_at: "2026-07-29T03:00:00", base_refs: [{ station_key: "u" }] },
+  ];
+  const stations = [
+    { station_key: "a", address: "台北市合成路1號", normalized_address: "台北市合成路1號", is_virtual: false },
+    { station_key: "b", address: "台北市合成路1號", normalized_address: "台北市合成路1號", is_virtual: false },
+    { station_key: "u", address: "合成未知區域", normalized_address: "合成未知區域", is_virtual: false },
+  ];
+  const hotspots = PhoneWorkbench.computeAddressHotspots(records, stations);
+  const stats = PhoneWorkbench.computeTaiwanCountyStats(hotspots);
+  const taipei = stats.find((row) => row.county === "臺北市");
+  const unknown = stats.find((row) => row.county === "未辨識");
+
+  assert.equal(stats.length, 23);
+  assert.equal(taipei.count, 2);
+  assert.equal(unknown.count, 1);
+  assert.ok(Math.abs(taipei.percent - (2 / 3) * 100) < 1e-9);
+  assert.ok(Math.abs(stats.reduce((sum, row) => sum + row.percent, 0) - 100) < 1e-9);
+  const empty = PhoneWorkbench.computeTaiwanCountyStats([]);
+  assert.equal(empty.length, 23);
+  assert.ok(empty.every((row) => row.count === 0 && row.percent === 0));
+});
+
 test("keeps the existing Taiwan Mobile parser behavior", () => {
   const rows = [
     ["通話類別", "目標電話", "對象電話", "始話日期時間", "通話時間(秒)", "基地台編號1/位置1"],
@@ -270,7 +308,14 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
   assert.doesNotMatch(html, /googletagmanager|gtag\s*\(/i);
   assert.doesNotMatch(html, /tellows\.tw/i);
-  assert.match(html, /今日重點（2026-07-26）/);
+  assert.match(html, /今日重點（2026-07-29）/);
+  assert.match(html, /熱點時間摘要新增縣市統計與快速篩選/);
+  assert.match(html, /id="hotspotCountyFilterButton" class="county-filter-button"/);
+  assert.match(html, /id="hotspotCountyFilterModal"[^>]+role="dialog"[^>]+aria-modal="true"/);
+  assert.match(html, /回復預設/);
+  assert.match(appSource, /const TAIWAN_COUNTIES = \[/);
+  assert.match(appSource, /hotspotCountySelection: new Set\(ALL_COUNTY_FILTER_KEYS\)/);
+  assert.doesNotMatch(appSource, /phone-workbench-hotspot-county/);
   assert.match(html, /附卷檔案匯出/);
   assert.match(html, /調整側欄入口/);
   assert.match(html, /新增多檔案匯入功能/);
@@ -289,14 +334,14 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   for (const relativePath of ["vendor/xlsx.full.min.js", "attachment-export.js", "app.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
-    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=20260726-notice-copy-v1"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=20260729-county-filter-v1"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
     assert.ok(html.includes(`'${sri}'`));
   }
   for (const relativePath of ["vendor/exceljs.min.js", "vendor/pdf-lib.min.js", "vendor/fontkit.umd.min.js", "vendor/open-huninn-data.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
     assert.ok(html.includes(`'${sri}'`));
-    assert.ok(appSource.includes(`./${relativePath}?v=20260726-notice-copy-v1`));
+    assert.ok(appSource.includes(`./${relativePath}?v=20260729-county-filter-v1`));
     assert.ok(appSource.includes(sri));
   }
   assert.match(html, /connect-src 'none'/);
