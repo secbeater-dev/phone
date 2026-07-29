@@ -308,6 +308,7 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
   assert.doesNotMatch(html, /googletagmanager|gtag\s*\(/i);
   assert.doesNotMatch(html, /tellows\.tw/i);
+  assert.match(html, /href="\.\/styles\.css\?v=20260729-county-bulk-select-v1"/);
   assert.match(html, /今日重點（2026-07-29）/);
   assert.match(html, /熱點時間摘要新增縣市統計與快速篩選/);
   assert.match(html, /id="hotspotCountyFilterButton" class="county-filter-button"/);

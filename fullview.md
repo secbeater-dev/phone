@@ -41,7 +41,7 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 ## 3. 載入順序
 
 1. `index.html` 建立側欄、六個 view、匯入控制、熱點縣市篩選視窗、附卷匯出視窗與使用提醒；提醒中的「今日重點」列出目前發布的使用者可見更新，Gemini 區塊使用原生 `details` 顯示家庭分享教學。
-2. 瀏覽器透過固定發布版本查詢字串載入 `vendor/xlsx.full.min.js`、`attachment-export.js` 與 `app.js`，驗證 SHA-384 SRI 後依序執行；版本字串避免舊快取與新 SRI 衝突，CSP 不允許其他 script。
+2. 瀏覽器透過固定發布版本查詢字串載入 `styles.css`、`vendor/xlsx.full.min.js`、`attachment-export.js` 與 `app.js`；三個 script 驗證 SHA-384 SRI 後依序執行。版本字串避免舊快取與新版資產衝突，CSP 不允許其他 script。
 3. `app.js` 與 `attachment-export.js` 均以 UMD 包裝，可供瀏覽器及 Node 測試使用。只有使用者按下附卷下載時，`app.js` 才以固定版本路徑與 SRI 延遲載入 ExcelJS，或依序載入 pdf-lib、fontkit 與字型資料。
 4. `DOMContentLoaded` 執行 `init()`，還原偏好、綁定事件並渲染所有 view。
 
@@ -212,3 +212,4 @@ XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版�
 - 2026-07-26：移除附卷視窗及下載完成訊息中的指定個資提醒文字；更新使用提醒為多檔案匯入說明，並加入更多支援類型 Notion 連結。
 - 2026-07-29：熱點時間摘要新增現行 22 縣市與「未辨識」的總數、比例及多選快速篩選；台/臺統一分類，條件只影響熱點列表且不寫入 localStorage 或附卷。
 - 2026-07-29：縣市篩選新增「全選」及「全部取消」草稿操作；全部取消後仍須至少重選一項才能套用。
+- 2026-07-29：為 `styles.css` 加入固定發布版本查詢字串，避免正式站沿用舊版響應式樣式快取。
