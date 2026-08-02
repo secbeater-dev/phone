@@ -24,6 +24,38 @@ function multiSheetWorkbookBytes(sheets) {
   return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 }
 
+function excelSerial(year, month, day, hour = 0, minute = 0, second = 0) {
+  return 25569 + Date.UTC(year, month - 1, day, hour, minute, second) / 86400000;
+}
+
+function fetOrderHeaders() {
+  return [
+    "Status", "DocNo", "Cost", "Charge", "Comment", "Seq", "Status2", "QueType", "QueObject",
+    "StartDate", "StartTime", "EndDate", "EndTime", "QueDirection", "ResultType", "Memo", "CallDirection",
+    "CallingNumber", "CalledNumber", "CallStartTimeStamp", "Duration", "CellStartID", "CellStarted", "CellEndID",
+    "CellEnded", "IMEI", "CallFwd",
+  ];
+}
+
+function fetOrderRows() {
+  return [
+    fetOrderHeaders(),
+    ["完成", "SYNTH-ORDER", "", "", "合成案件", "1", "完成", 1, "0900000401", excelSerial(2026, 8, 1), 0, excelSerial(2026, 8, 2), 0, 3, 1, "合成查詢", "O", "0900000401", "0900000402", excelSerial(2026, 8, 1, 1, 2, 3), 12, 3001, "臺北市合成路1號", 3002, "新北市合成路2號", 123456789012345, "0900000499"],
+    ["完成", "SYNTH-ORDER", "", "", "合成案件", "2", "完成", 2, 123456789012345, excelSerial(2026, 8, 1), 0, excelSerial(2026, 8, 2), 0, 2, 2, "", "9", "0900000403", "0900000404", excelSerial(2026, 8, 1, 2, 3, 4), 8, 3003, "桃園市合成路3號", "", "", 123456789012345, ""],
+  ];
+}
+
+function fetOrderXml(encoding = "UTF-8") {
+  return `<?xml version="1.0" encoding="${encoding}"?>
+<Order>
+  <SummaryInfo><Status>DONE</Status><DocNo>SYNTH-XML</DocNo><Comment>SYNTHETIC</Comment></SummaryInfo>
+  <Record>
+    <QueryInfo><Seq>1</Seq><Status2>DONE</Status2><QueType>1</QueType><QueObject>0900000501</QueObject><QueDirection>3</QueDirection><ResultType>1</ResultType><Memo>SYNTHETIC</Memo></QueryInfo>
+    <CDRInfo><CallDirection>T</CallDirection><CallingNumber>0900000502</CallingNumber><CalledNumber>0900000501</CalledNumber><CallStartTimeStamp>2026-08-02T03:04:05.678</CallStartTimeStamp><Duration>22</Duration><CellStartID>4001</CellStartID><CellStarted>臺中市合成路1號</CellStarted><CellEndID>4002</CellEndID><CellEnded>臺南市合成路2號</CellEnded><IMEI>222222222222222</IMEI><CallFwd>0900000599</CallFwd></CDRInfo>
+  </Record>
+</Order>`;
+}
+
 function chtRows() {
   const rows = [
     ["查詢結果：成功"],
@@ -164,6 +196,45 @@ test("tracks the actual source sheet for Far EasTone records", () => {
   assert.ok(workspace.records.some((record) => record.source_sheet === "第二區段"));
 });
 
+test("parses Far EasTone Order XLSX from the English raw sheet without duplicating a presentation sheet", () => {
+  const bytes = multiSheetWorkbookBytes([
+    { name: "中文展示", rows: [["通聯方向", "主叫", "受叫"], ["合成", "0900000000", "0900000001"]] },
+    { name: "CDRInfo", rows: fetOrderRows() },
+  ]);
+  const workspace = PhoneWorkbench.parseImportFile("synthetic-order.xlsx", bytes);
+
+  assert.equal(workspace.case.carrier, "遠傳電信");
+  assert.equal(workspace.case.source_format, "fet_order_cdr_xlsx");
+  assert.equal(workspace.records.length, 2);
+  assert.deepEqual(workspace.records.map((record) => record.direction), ["outbound", "inbound"]);
+  assert.equal(workspace.records[0].occurred_at, "2026-08-01T01:02:03");
+  assert.equal(workspace.records[0].call_type, "Original發話");
+  assert.equal(workspace.records[0].imei, "123456789012345");
+  assert.deepEqual(workspace.records[0].base_refs.map((ref) => ref.role), ["start", "end"]);
+  assert.deepEqual(workspace.records[1].base_refs.map((ref) => ref.role), ["start"]);
+  assert.equal(workspace.case.subject["調閱類型"], "電話號碼、手機序號");
+  assert.equal(workspace.case.subject["查詢起始"], "2026-08-01T00:00:00");
+});
+
+test("parses UTF-8 and Big5-declared Far EasTone Order XML and rejects unknown XML", () => {
+  const utf8 = PhoneWorkbench.parseImportFile("synthetic-order-utf8.xml", Buffer.from(fetOrderXml("UTF-8"), "utf8"));
+  const big5 = PhoneWorkbench.parseImportFile("synthetic-order-big5.xml", Buffer.from(fetOrderXml("Big5").replace(/臺中市合成路1號|臺南市合成路2號/g, "SYNTH-STATION"), "ascii"));
+
+  for (const workspace of [utf8, big5]) {
+    assert.equal(workspace.case.source_format, "fet_order_cdr_xml");
+    assert.equal(workspace.records.length, 1);
+    assert.equal(workspace.records[0].occurred_at, "2026-08-02T03:04:05");
+    assert.equal(workspace.records[0].direction, "inbound");
+    assert.equal(workspace.records[0].call_type, "Terminal受話");
+    assert.equal(workspace.records[0].base_refs.length, 2);
+    assert.match(workspace.records[0].note, /指定轉接/);
+  }
+  assert.throws(
+    () => PhoneWorkbench.parseImportFile("unknown.xml", Buffer.from("<?xml version=\"1.0\"?><Unknown><Value>synthetic</Value></Unknown>")),
+    /找不到支援的 XML 結構/,
+  );
+});
+
 test("merges every selected workspace without overwriting earlier call records", () => {
   const first = PhoneWorkbench.parseImportFile("synthetic-fet-a.xlsx", workbookBytes(fetProsecutorRows()));
   const second = PhoneWorkbench.parseImportFile("synthetic-fet-b.xlsx", workbookBytes(fetProsecutorRows({ withSpacer: true, repeatedSection: true })));
@@ -191,6 +262,42 @@ test("builds a complete attachment report with both ranking modes and browser-on
   assert.equal(report.stats.count.totalRows.length, report.stats.seconds.totalRows.length);
   assert.ok(report.calls.some((record) => record.counterparty_note === "合成電話備註"));
   assert.equal(report.profile.imeis.length > 0, true);
+});
+
+test("computes inclusive date bounds and excludes invalid dates only for an active filter", () => {
+  const records = [
+    { occurred_at: "2026-08-01T23:59:59" },
+    { occurred_at: "2026-08-02T00:00:00" },
+    { occurred_at: "2026-08-02T23:59:59" },
+    { occurred_at: "invalid-synthetic-date" },
+    { occurred_at: "" },
+  ];
+  assert.deepEqual(PhoneWorkbench.computeDateRangeBounds(records), { start: "2026-08-01", end: "2026-08-02" });
+  assert.equal(PhoneWorkbench.filterRecordsByDateRange(records, { active: false }).length, 5);
+  assert.equal(PhoneWorkbench.filterRecordsByDateRange(records, { active: true, start: "2026-08-02", end: "2026-08-02" }).length, 2);
+  assert.equal(PhoneWorkbench.filterRecordsByDateRange(records, { active: true, start: "2026-08-02", end: "2026-08-01" }).length, 0);
+  assert.deepEqual(PhoneWorkbench.computeDateRangeBounds([{ occurred_at: "invalid" }]), { start: "", end: "" });
+});
+
+test("adds a backwards-compatible date scope to attachment report metadata", () => {
+  const workspace = PhoneWorkbench.parseImportFile("synthetic-order.xlsx", workbookBytes(fetOrderRows()));
+  const selected = {
+    ...workspace,
+    records: workspace.records.slice(0, 1),
+    base_stations: workspace.base_stations.filter((station) => workspace.records[0].base_refs.some((ref) => ref.station_key === station.station_key)),
+  };
+  const report = PhoneWorkbench.buildAttachmentReport(selected, {}, "2026-08-02T00:00:00.000Z", {
+    scope: "date_filter",
+    scope_label: "日期篩選：2026-08-01 至 2026-08-01",
+    date_range: { start: "2026-08-01", end: "2026-08-01" },
+  });
+
+  assert.equal(report.meta.scope, "date_filter");
+  assert.equal(report.meta.scope_label, "日期篩選：2026-08-01 至 2026-08-01");
+  assert.deepEqual(report.meta.date_range, { start: "2026-08-01", end: "2026-08-01" });
+  assert.equal(report.calls.length, 1);
+  assert.equal(report.profile.summary["通聯筆數"], 1);
+  assert.equal(report.hotspots.length, selected.base_stations.length);
 });
 
 test("creates a six-sheet attachment XLSX with identifiers stored as text", async () => {
@@ -308,14 +415,26 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
   assert.doesNotMatch(html, /googletagmanager|gtag\s*\(/i);
   assert.doesNotMatch(html, /tellows\.tw/i);
-  assert.match(html, /href="\.\/styles\.css\?v=20260729-county-bulk-select-v1"/);
-  assert.match(html, /今日重點（2026-07-29）/);
-  assert.match(html, /熱點時間摘要新增縣市統計與快速篩選/);
+  assert.match(html, /href="\.\/styles\.css\?v=20260802-fet-order-date-filter-v1"/);
+  assert.match(html, /今日重點（2026-08-02）/);
+  assert.match(html, /Order 原始通聯 XLSX 與 XML 格式支援/);
+  assert.match(html, /支援多檔案同批匯入/);
+  assert.match(html, /id="dateFilterPanel" class="sidebar-panel date-filter-panel" hidden/);
+  assert.match(html, /id="dateFilterButton"[^>]+aria-controls="dateFilterModal"/);
+  assert.match(html, /id="dateFilterModal"[^>]+role="dialog"[^>]+aria-modal="true"/);
+  assert.match(html, /id="dateFilterStartInput" type="date"/);
+  assert.match(html, /id="dateFilterEndInput" type="date"/);
+  assert.match(html, /id="dateFilterResetButton"[^>]*>回復預設<\/button>/);
+  assert.match(appSource, /computeDateRangeBounds/);
+  assert.match(appSource, /filterRecordsByDateRange/);
+  assert.match(appSource, /scope_label: `日期篩選/);
+  assert.doesNotMatch(appSource, /phone-workbench-date-range/);
+  assert.match(styles, /\.date-filter-card\s*\{/);
   assert.match(html, /id="hotspotCountyFilterButton" class="county-filter-button"/);
   assert.match(html, /id="hotspotCountyFilterModal"[^>]+role="dialog"[^>]+aria-modal="true"/);
   assert.match(html, /id="hotspotCountySelectAllButton"[^>]*>全選<\/button>/);
   assert.match(html, /id="hotspotCountyClearAllButton"[^>]*>全部取消<\/button>/);
-  assert.doesNotMatch(html, /回復預設|hotspotCountyFilterResetButton/);
+  assert.doesNotMatch(html, /hotspotCountyFilterResetButton/);
   assert.match(appSource, /selectAllHotspotCountyDraft/);
   assert.match(appSource, /clearAllHotspotCountyDraft/);
   assert.match(appSource, /state\.hotspotCountyDraft = new Set\(\);/);
@@ -323,8 +442,6 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   assert.match(appSource, /hotspotCountySelection: new Set\(ALL_COUNTY_FILTER_KEYS\)/);
   assert.doesNotMatch(appSource, /phone-workbench-hotspot-county/);
   assert.match(html, /附卷檔案匯出/);
-  assert.match(html, /調整側欄入口/);
-  assert.match(html, /新增多檔案匯入功能/);
   assert.doesNotMatch(html, /遠傳 XLSX/);
   assert.doesNotMatch(html, /個資提醒|請依個資規範妥善保管/);
   assert.doesNotMatch(appSource, /請依個資規範妥善保管/);
@@ -340,14 +457,14 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   for (const relativePath of ["vendor/xlsx.full.min.js", "attachment-export.js", "app.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
-    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=20260729-county-bulk-select-v1"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=20260802-fet-order-date-filter-v1"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
     assert.ok(html.includes(`'${sri}'`));
   }
   for (const relativePath of ["vendor/exceljs.min.js", "vendor/pdf-lib.min.js", "vendor/fontkit.umd.min.js", "vendor/open-huninn-data.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
     assert.ok(html.includes(`'${sri}'`));
-    assert.ok(appSource.includes(`./${relativePath}?v=20260729-county-bulk-select-v1`));
+    assert.ok(appSource.includes(`./${relativePath}?v=20260802-fet-order-date-filter-v1`));
     assert.ok(appSource.includes(sri));
   }
   assert.match(html, /connect-src 'none'/);

@@ -11,10 +11,12 @@ This GitHub Pages build runs fully in the browser. Imported files are parsed loc
 - Import supported `.xlsx` and `.xml` CDR files in the browser.
 - Supports the Chunghwa Telecom prosecutor-office XLSX layout with whitespace-normalized headers.
 - Supports the Far EasTone prosecutor-office call XLSX layout, including repeated query sections and spacer-column variants.
+- Supports Far EasTone Order `QueryInfo` / `CDRInfo` XLSX and XML layouts, including raw Excel dates/identifiers and UTF-8, Big5, or UTF-16 XML decoding.
 - Merge every successfully parsed file selected in one import batch, retain each record's source, and replace the current batch only after a new batch has at least one success.
 - Review the complete call list with 500-row pagination, subject metadata, time distribution, phone statistics, and submission CSV output.
 - Filter hotspot addresses by any combination of Taiwan's 22 current counties/cities plus an unrecognized-address category; 台 and 臺 are classified together, with bulk select and clear controls.
-- Export a local attachment package: one six-sheet XLSX or six searchable-text PDFs covering time distribution, hotspots, calls, profile data, and count/seconds phone rankings.
+- Apply an inclusive overall date range to the call list, profile summary and IMEI list, phone statistics, time/hotspot analysis, and attachment exports; resetting restores the complete import.
+- Export a local attachment package for the active overall date range: one six-sheet XLSX or six searchable-text PDFs covering time distribution, hotspots, calls, profile data, and count/seconds phone rankings.
 - Export/import local browser settings and export parsed workspace JSON.
 - `/admin.html` and missing routes show a maintenance notice.
 

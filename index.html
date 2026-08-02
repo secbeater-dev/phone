@@ -4,10 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT' 'sha384-0bvIQoA6vO2bPEvCiRUrXiHjHI1/87vg7486XIcual9H8Ay2Ws1btD2gvWOOD4ne' 'sha384-ykDrSNj76wSuqZ0Pyc4o8DdXECm3x96+hglZkiH8Xz2xF9PmuBhAXeuEL1ysGg+d' 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' 'sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn' 'sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'; media-src 'none'; manifest-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT' 'sha384-M0ruih3I+EYxxDzsj6KERi+BoH6pvIVrbuBzQlxXlNtZaI/PGY6yGgcpl9ojYNAv' 'sha384-NmHzQ2SDxXqxbqsIrkWIjN9wBR+6mmX0Yj48ueUMqo5tm9HdftnUhmeCjHGsiXTJ' 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' 'sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn' 'sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'; media-src 'none'; manifest-src 'none'" />
     <title>通聯資料分析工具</title>
     <link rel="icon" type="image/png" href="./assets/Beater_icon.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260729-county-bulk-select-v1" />
+    <link rel="stylesheet" href="./styles.css?v=20260802-fet-order-date-filter-v1" />
   </head>
   <body>
     <div class="app-shell">
@@ -33,6 +33,13 @@
           <button id="importButton" class="primary-button" type="button">選擇檔案匯入</button>
           <p id="importStatus" class="message">匯入資料只會在你的瀏覽器本機處理。</p>
           <div id="importResults" class="import-results"></div>
+        </section>
+        <section id="dateFilterPanel" class="sidebar-panel date-filter-panel" hidden>
+          <h3>時間篩選</h3>
+          <button id="dateFilterButton" class="date-filter-trigger" type="button" aria-controls="dateFilterModal" aria-expanded="false" title="時間篩選">
+            <span class="date-filter-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5V4Z"/><path d="M8 2v4M16 2v4M5 9h14"/><path d="M9 13h2M13 13h2M9 17h2"/></svg></span>
+            <span class="date-filter-copy"><strong>設定日期範圍</strong><small id="dateFilterSummary">完整匯入範圍</small></span>
+          </button>
         </section>
         <section class="sidebar-tools" aria-label="工具">
           <button id="dataExportViewButton" class="sidebar-tool-button" data-view="export" type="button" title="資料匯出">
@@ -198,6 +205,28 @@
         </section>
       </main>
     </div>
+    <section id="dateFilterModal" class="usage-modal" role="dialog" aria-modal="true" aria-labelledby="dateFilterTitle" hidden>
+      <div class="date-filter-card">
+        <div class="date-filter-heading">
+          <div>
+            <h2 id="dateFilterTitle">時間篩選</h2>
+            <p class="muted">設定整體分析與附卷使用的日期範圍。</p>
+          </div>
+          <button id="dateFilterCloseButton" class="ghost-button compact-action" type="button" aria-label="關閉時間篩選">關閉</button>
+        </div>
+        <div class="date-filter-fields">
+          <label class="date-filter-field" for="dateFilterStartInput"><span>起始日期</span><input id="dateFilterStartInput" type="date" /></label>
+          <div class="date-filter-rule" aria-hidden="true"></div>
+          <label class="date-filter-field" for="dateFilterEndInput"><span>結束日期</span><input id="dateFilterEndInput" type="date" /></label>
+        </div>
+        <p id="dateFilterStatus" class="message" role="status" aria-live="polite"></p>
+        <div class="date-filter-actions">
+          <button id="dateFilterResetButton" class="secondary-button" type="button">回復預設</button>
+          <button id="dateFilterCancelButton" class="secondary-button" type="button">取消</button>
+          <button id="dateFilterApplyButton" class="primary-button" type="button">篩選</button>
+        </div>
+      </div>
+    </section>
     <section id="hotspotCountyFilterModal" class="usage-modal" role="dialog" aria-modal="true" aria-labelledby="hotspotCountyFilterTitle" hidden>
       <div class="county-filter-card">
         <div class="county-filter-heading">
@@ -227,7 +256,7 @@
         <div class="attachment-export-heading">
           <div>
             <h2 id="attachmentExportTitle">附卷檔案匯出</h2>
-            <p class="muted">匯出完整匯入資料，不受目前搜尋、時段篩選或通聯列表分頁影響。</p>
+            <p class="muted">匯出目前全域日期範圍，不受搜尋、24 小時篩選或通聯列表分頁影響。</p>
           </div>
           <button id="attachmentExportCloseButton" class="ghost-button compact-action" type="button">關閉</button>
         </div>
@@ -260,13 +289,12 @@
             <p>任何問題歡迎於 <a href="https://t.me/secbeater" target="_blank" rel="noopener noreferrer">Telegram</a> 中提出。</p>
           </div>
           <section class="notice-focus">
-            <h3>今日重點（2026-07-29）</h3>
+            <h3>今日重點（2026-08-02）</h3>
             <ul class="notice-list">
-              <li>熱點時間摘要新增縣市統計與快速篩選，可合併辨識「台／臺」並多選分析。</li>
-              <li>縣市篩選新增「全選」與「全部取消」，方便快速重新挑選分析範圍。</li>
-              <li>新增多檔案匯入功能，選取多份 XLSX 時會完整合併至通聯列表。</li>
-              <li>新增附卷檔案匯出，可下載六分頁 XLSX 與六種可搜尋 PDF。</li>
-              <li>調整側欄入口：附卷檔案匯出移至主功能導覽，資料匯出移至下方工具區。</li>
+              <li>新增 Order 原始通聯 XLSX 與 XML 格式支援，包含 Excel 原始日期、Big5 XML、方向及雙基地台解析。</li>
+              <li>資料匯入下方新增「時間篩選」，可用起訖日期一次篩選各分析區域。</li>
+              <li>附卷 XLSX 與 PDF 會依目前全域日期範圍產生，回復預設即可恢復完整資料。</li>
+              <li>支援多檔案同批匯入，成功項目會合併至同一通聯列表。</li>
             </ul>
           </section>
           <p class="notice-note">備註：一鍵更新會清除本機設定（所有資料），並強制重載最新版（等同 Ctrl+F5）。</p>
@@ -299,8 +327,8 @@
         </aside>
       </div>
     </section>
-    <script src="./vendor/xlsx.full.min.js?v=20260729-county-bulk-select-v1" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
-    <script src="./attachment-export.js?v=20260729-county-bulk-select-v1" integrity="sha384-0bvIQoA6vO2bPEvCiRUrXiHjHI1/87vg7486XIcual9H8Ay2Ws1btD2gvWOOD4ne" crossorigin="anonymous"></script>
-    <script src="./app.js?v=20260729-county-bulk-select-v1" integrity="sha384-ykDrSNj76wSuqZ0Pyc4o8DdXECm3x96+hglZkiH8Xz2xF9PmuBhAXeuEL1ysGg+d" crossorigin="anonymous"></script>
+    <script src="./vendor/xlsx.full.min.js?v=20260802-fet-order-date-filter-v1" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
+    <script src="./attachment-export.js?v=20260802-fet-order-date-filter-v1" integrity="sha384-M0ruih3I+EYxxDzsj6KERi+BoH6pvIVrbuBzQlxXlNtZaI/PGY6yGgcpl9ojYNAv" crossorigin="anonymous"></script>
+    <script src="./app.js?v=20260802-fet-order-date-filter-v1" integrity="sha384-NmHzQ2SDxXqxbqsIrkWIjN9wBR+6mmX0Yj48ueUMqo5tm9HdftnUhmeCjHGsiXTJ" crossorigin="anonymous"></script>
   </body>
 </html>

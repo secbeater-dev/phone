@@ -19,10 +19,10 @@
   const LOCAL_EXPORT_VERSION = "phone-workbench-local-settings-v1";
   const CALL_PAGE_SIZE = 500;
   const ATTACHMENT_ASSETS = {
-    exceljs: { src: "./vendor/exceljs.min.js?v=20260729-county-bulk-select-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
-    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260729-county-bulk-select-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
-    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260729-county-bulk-select-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
-    fontData: { src: "./vendor/open-huninn-data.js?v=20260729-county-bulk-select-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
+    exceljs: { src: "./vendor/exceljs.min.js?v=20260802-fet-order-date-filter-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
+    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260802-fet-order-date-filter-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
+    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260802-fet-order-date-filter-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
+    fontData: { src: "./vendor/open-huninn-data.js?v=20260802-fet-order-date-filter-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
   };
   const loadedAttachmentAssets = new Map();
   const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}-${String(hour + 1).padStart(2, "0")}`);
@@ -59,6 +59,26 @@
   const CHT_PROSECUTOR_HEADERS = ["CDR類別", "主叫號碼", "查詢狀態", "受叫號碼", "始話日期時間", "通話秒數", "IMEI", "指定轉接", "起始基地台-地址/終止基地台-地址"];
   const FET_PROSECUTOR_CALL_HEADERS = ["始話時間", "通話秒數", "調閱號碼", "IMEI", "通話類別", "通話對象", "轉接電話", "基地台/交換機", "備註"];
   const FET_PROSECUTOR_METADATA_KEYS = new Set(["文號", "查詢日期", "電信業者", "通聯類別", "查詢狀態", "區段時間", "備註", "電話號碼"]);
+  const FET_ORDER_HEADERS = [
+    "DocNo", "Seq", "Status2", "QueType", "QueObject", "QueDirection", "CallDirection",
+    "CallingNumber", "CalledNumber", "CallStartTimeStamp", "Duration", "IMEI",
+  ];
+  const FET_ORDER_CALL_TYPES = {
+    O: "Original發話",
+    T: "Terminal受話",
+    I: "Incoming Gateway進來CDR",
+    1: "SMS 系統發訊",
+    2: "SMS 手機發訊",
+    9: "SMS 收訊",
+    S: "雙號共振",
+    M: "多媒體簡訊",
+  };
+  const FET_ORDER_QUERY_TYPES = {
+    1: "電話號碼", 2: "手機序號", 3: "身份證ID", 4: "SIM卡", 6: "IMSI",
+    10: "護照號碼", 11: "統一證號", 12: "公話編號",
+  };
+  const FET_ORDER_QUERY_DIRECTIONS = { 1: "發話", 2: "受話", 3: "雙向" };
+  const FET_ORDER_RESULT_TYPES = { 1: "用戶資料與使用記錄", 2: "使用記錄", 3: "用戶資料" };
   const TAIWAN_COUNTIES = [
     "臺北市", "新北市", "桃園市", "臺中市", "臺南市", "高雄市", "基隆市", "新竹市", "嘉義市", "新竹縣", "苗栗縣",
     "彰化縣", "南投縣", "雲林縣", "嘉義縣", "屏東縣", "宜蘭縣", "花蓮縣", "臺東縣", "澎湖縣", "金門縣", "連江縣",
@@ -79,6 +99,9 @@
     expandedHotspotAddress: "",
     hotspotCountySelection: new Set(ALL_COUNTY_FILTER_KEYS),
     hotspotCountyDraft: new Set(ALL_COUNTY_FILTER_KEYS),
+    dateRangeBounds: { start: "", end: "" },
+    dateRange: { start: "", end: "", active: false },
+    dateRangeDraft: { start: "", end: "" },
     phoneNotes: {},
     callColumnWidths: {},
     theme: "light",
@@ -99,6 +122,7 @@
     renderHourTiles();
     renderAllViews();
     syncHotspotCountyFilterButton();
+    syncDateFilterPanel();
     initCallColumnResize();
     maybeShowUsageNotice();
   }
@@ -113,6 +137,15 @@
     });
     $("importButton")?.addEventListener("click", () => $("fileInput")?.click());
     $("fileInput")?.addEventListener("change", handleFileImport);
+    $("dateFilterButton")?.addEventListener("click", showDateFilterModal);
+    $("dateFilterCloseButton")?.addEventListener("click", hideDateFilterModal);
+    $("dateFilterCancelButton")?.addEventListener("click", hideDateFilterModal);
+    $("dateFilterResetButton")?.addEventListener("click", resetDateFilter);
+    $("dateFilterApplyButton")?.addEventListener("click", applyDateFilter);
+    ["dateFilterStartInput", "dateFilterEndInput"].forEach((id) => $(id)?.addEventListener("input", syncDateFilterDraftUi));
+    $("dateFilterModal")?.addEventListener("click", (event) => {
+      if (event.target === $("dateFilterModal")) hideDateFilterModal();
+    });
     $("recordSearch")?.addEventListener("input", () => {
       state.callPage = 1;
       renderTwoWayCalls();
@@ -180,7 +213,8 @@
     });
     document.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") return;
-      if (!$("hotspotCountyFilterModal")?.hidden) hideHotspotCountyFilterModal();
+      if (!$("dateFilterModal")?.hidden) hideDateFilterModal();
+      else if (!$("hotspotCountyFilterModal")?.hidden) hideHotspotCountyFilterModal();
       else if (!$("attachmentExportModal")?.hidden) hideAttachmentExportModal();
     });
     document.addEventListener("pointermove", handleCallColumnResizeMove);
@@ -358,7 +392,9 @@
     state.expandedHotspotAddress = "";
     state.hotspotCountySelection = new Set(ALL_COUNTY_FILTER_KEYS);
     state.hotspotCountyDraft = new Set(ALL_COUNTY_FILTER_KEYS);
+    resetDateRangeState(state.callRecords);
     syncHotspotCountyFilterButton();
+    syncDateFilterPanel();
     prefillSubmissionPhones(state.callRecords);
     renderAllViews();
   }
@@ -369,10 +405,182 @@
     renderStatsView();
     renderHoursView();
     renderSubmissionPreview();
+    syncDateFilterPanel();
+  }
+
+  function resetDateRangeState(records) {
+    state.dateRangeBounds = computeDateRangeBounds(records);
+    state.dateRange = { ...state.dateRangeBounds, active: false };
+    state.dateRangeDraft = { ...state.dateRangeBounds };
+  }
+
+  function computeDateRangeBounds(records) {
+    const dates = (records || []).map((record) => validRecordDate(record?.occurred_at)).filter(Boolean).sort();
+    return { start: dates[0] || "", end: dates[dates.length - 1] || "" };
+  }
+
+  function filterRecordsByDateRange(records, range) {
+    const input = Array.isArray(records) ? records : [];
+    if (!range?.active) return [...input];
+    const start = validDateText(range.start);
+    const end = validDateText(range.end);
+    if (!start || !end || start > end) return [];
+    return input.filter((record) => {
+      const date = validRecordDate(record?.occurred_at);
+      return date && date >= start && date <= end;
+    });
+  }
+
+  function validRecordDate(value) {
+    const normalized = normalizeDatetime(value);
+    return normalized ? validDateText(normalized.slice(0, 10)) : "";
+  }
+
+  function validDateText(value) {
+    const text = cellText(value);
+    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return "";
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.getUTCFullYear() === year && date.getUTCMonth() + 1 === month && date.getUTCDate() === day ? text : "";
+  }
+
+  function analysisRecords() {
+    return filterRecordsByDateRange(state.callRecords, state.dateRange);
+  }
+
+  function analysisWorkspace() {
+    if (!state.currentWorkspace) return null;
+    if (!state.dateRange.active) return state.currentWorkspace;
+    const records = analysisRecords();
+    const stationKeys = new Set(records.flatMap((record) => (record.base_refs || []).map((ref) => ref.station_key).filter(Boolean)));
+    const stations = (state.currentWorkspace.base_stations || []).filter((station) => stationKeys.has(station.station_key || stationKey(station)));
+    return {
+      ...state.currentWorkspace,
+      case: {
+        ...state.currentWorkspace.case,
+        total_records: records.length,
+        summary: parsedSummary(records, stations),
+      },
+      records,
+      base_stations: stations,
+    };
+  }
+
+  function invalidDateRecordCount(records) {
+    return (records || []).reduce((count, record) => count + (validRecordDate(record?.occurred_at) ? 0 : 1), 0);
+  }
+
+  function syncDateFilterPanel() {
+    if (typeof document === "undefined") return;
+    const panel = $("dateFilterPanel");
+    if (!panel) return;
+    const hasWorkspace = Boolean(state.currentWorkspace);
+    panel.hidden = !hasWorkspace;
+    if (!hasWorkspace) return;
+    const hasBounds = Boolean(state.dateRangeBounds.start && state.dateRangeBounds.end);
+    const button = $("dateFilterButton");
+    if (button) button.disabled = !hasBounds;
+    let label = hasBounds ? `${state.dateRangeBounds.start} 至 ${state.dateRangeBounds.end}` : "沒有可解析日期";
+    if (state.dateRange.active) {
+      const excluded = invalidDateRecordCount(state.callRecords);
+      label = `${state.dateRange.start} 至 ${state.dateRange.end}${excluded ? `；排除 ${excluded.toLocaleString()} 筆日期異常資料` : ""}`;
+    }
+    if ($("dateFilterSummary")) $("dateFilterSummary").textContent = label;
+    if (button) {
+      button.classList.toggle("active", state.dateRange.active);
+      button.title = state.dateRange.active ? `時間篩選：${label}` : "時間篩選";
+      button.setAttribute("aria-label", state.dateRange.active ? `時間篩選已套用，${label}` : `時間篩選，完整範圍 ${label}`);
+    }
+  }
+
+  function showDateFilterModal() {
+    const modal = $("dateFilterModal");
+    if (!modal || !state.currentWorkspace || !state.dateRangeBounds.start || !state.dateRangeBounds.end) return;
+    state.dateRangeDraft = {
+      start: state.dateRange.active ? state.dateRange.start : state.dateRangeBounds.start,
+      end: state.dateRange.active ? state.dateRange.end : state.dateRangeBounds.end,
+    };
+    const startInput = $("dateFilterStartInput");
+    const endInput = $("dateFilterEndInput");
+    if (startInput) {
+      startInput.min = state.dateRangeBounds.start;
+      startInput.max = state.dateRangeBounds.end;
+      startInput.value = state.dateRangeDraft.start;
+    }
+    if (endInput) {
+      endInput.min = state.dateRangeBounds.start;
+      endInput.max = state.dateRangeBounds.end;
+      endInput.value = state.dateRangeDraft.end;
+    }
+    syncDateFilterDraftUi();
+    modal.hidden = false;
+    $("dateFilterButton")?.setAttribute("aria-expanded", "true");
+    startInput?.focus();
+  }
+
+  function hideDateFilterModal() {
+    const modal = $("dateFilterModal");
+    if (!modal || modal.hidden) return;
+    state.dateRangeDraft = {
+      start: state.dateRange.active ? state.dateRange.start : state.dateRangeBounds.start,
+      end: state.dateRange.active ? state.dateRange.end : state.dateRangeBounds.end,
+    };
+    modal.hidden = true;
+    $("dateFilterButton")?.setAttribute("aria-expanded", "false");
+    $("dateFilterButton")?.focus();
+  }
+
+  function syncDateFilterDraftUi() {
+    const start = cellText($("dateFilterStartInput")?.value);
+    const end = cellText($("dateFilterEndInput")?.value);
+    state.dateRangeDraft = { start, end };
+    const withinBounds = (!state.dateRangeBounds.start || start >= state.dateRangeBounds.start)
+      && (!state.dateRangeBounds.end || end <= state.dateRangeBounds.end);
+    const valid = Boolean(validDateText(start) && validDateText(end) && start <= end && withinBounds);
+    if ($("dateFilterApplyButton")) $("dateFilterApplyButton").disabled = !valid;
+    if ($("dateFilterStatus")) {
+      $("dateFilterStatus").textContent = !start || !end
+        ? "請選擇起始與結束日期。"
+        : start > end
+          ? "起始日期不得晚於結束日期。"
+          : !withinBounds
+            ? `日期須介於 ${state.dateRangeBounds.start} 與 ${state.dateRangeBounds.end}。`
+            : "日期範圍包含起始及結束整日。";
+      $("dateFilterStatus").classList.toggle("danger-text", !valid);
+    }
+  }
+
+  function applyDateFilter() {
+    const start = validDateText(state.dateRangeDraft.start);
+    const end = validDateText(state.dateRangeDraft.end);
+    if (!start || !end || start > end || start < state.dateRangeBounds.start || end > state.dateRangeBounds.end) return;
+    state.dateRange = { start, end, active: true };
+    state.callPage = 1;
+    state.expandedHotspotAddress = "";
+    const modal = $("dateFilterModal");
+    if (modal) modal.hidden = true;
+    $("dateFilterButton")?.setAttribute("aria-expanded", "false");
+    renderAllViews();
+    $("dateFilterButton")?.focus();
+  }
+
+  function resetDateFilter() {
+    state.dateRange = { ...state.dateRangeBounds, active: false };
+    state.dateRangeDraft = { ...state.dateRangeBounds };
+    state.callPage = 1;
+    state.expandedHotspotAddress = "";
+    const modal = $("dateFilterModal");
+    if (modal) modal.hidden = true;
+    $("dateFilterButton")?.setAttribute("aria-expanded", "false");
+    renderAllViews();
+    $("dateFilterButton")?.focus();
   }
 
   function renderProfileSummaryCards() {
-    const summary = state.currentWorkspace?.case?.summary || {};
+    const summary = analysisWorkspace()?.case?.summary || {};
     const target = $("profileSummaryCards");
     if (!target) return;
     target.innerHTML = [
@@ -459,7 +667,7 @@
 
   function sortedCallRecords() {
     const { column, direction } = state.callSort;
-    return [...state.callRecords].sort((a, b) => {
+    return analysisRecords().sort((a, b) => {
       const av = sortValue(a, column);
       const bv = sortValue(b, column);
       const compare = typeof av === "number" && typeof bv === "number"
@@ -585,7 +793,7 @@
   function renderProfileImeiList() {
     const target = $("profileImeiList");
     if (!target) return;
-    const imeis = collectUniqueImeis(state.callRecords);
+    const imeis = collectUniqueImeis(analysisRecords());
     target.innerHTML = imeis.length
       ? imeis.map((imei) => `<span class="imei-chip">${escapeHtml(imei)}</span>`).join("")
       : `<p class="muted">尚無 IMEI 資料。</p>`;
@@ -599,7 +807,7 @@
   }
 
   function renderStatsView() {
-    const stats = computePhoneStats(state.callRecords, state.phoneStatsRankMode);
+    const stats = computePhoneStats(analysisRecords(), state.phoneStatsRankMode);
     $("statsContent").innerHTML = [
       statsCard("來電排行", stats.inboundRows),
       statsCard("去電排行", stats.outboundRows),
@@ -727,7 +935,7 @@
 
   function filteredHourRecords() {
     const allowed = state.appliedHourSelection;
-    return state.callRecords.filter((record) => {
+    return analysisRecords().filter((record) => {
       const hour = hourFromIso(record.occurred_at);
       return hour >= 0 && allowed.has(hour);
     });
@@ -735,7 +943,7 @@
 
   function renderHourHotspots(records) {
     const query = ($("hourHotspotSearch")?.value || "").trim().toLowerCase();
-    const hotspots = computeAddressHotspots(records, state.currentWorkspace?.base_stations || []);
+    const hotspots = computeAddressHotspots(records, analysisWorkspace()?.base_stations || []);
     const countyFiltered = hotspots.filter((item) => state.hotspotCountySelection.has(classifyTaiwanCounty(item.address)));
     const filtered = query
       ? countyFiltered.filter((item) => [item.address, item.first_seen, item.last_seen, ...item.times].some((value) => String(value || "").toLowerCase().includes(query)))
@@ -781,7 +989,7 @@
   function renderHotspotCountyFilterModal() {
     const list = $("hotspotCountyFilterList");
     if (!list) return;
-    const hotspots = computeAddressHotspots(filteredHourRecords(), state.currentWorkspace?.base_stations || []);
+    const hotspots = computeAddressHotspots(filteredHourRecords(), analysisWorkspace()?.base_stations || []);
     const rows = computeTaiwanCountyStats(hotspots);
     list.innerHTML = rows.map((row) => `<label class="county-filter-row">
       <span class="county-filter-name"><input type="checkbox" data-county-filter="${escapeHtml(row.county)}" ${state.hotspotCountyDraft.has(row.county) ? "checked" : ""} /><span>${escapeHtml(row.county)}</span></span>
@@ -1023,7 +1231,7 @@
     const modal = $("attachmentExportModal");
     if (!modal) return;
     modal.hidden = false;
-    const hasData = Boolean(state.currentWorkspace && state.callRecords.length);
+    const hasData = Boolean(analysisWorkspace()?.records?.length);
     $("attachmentXlsxButton").disabled = !hasData;
     document.querySelectorAll("[data-attachment-pdf]").forEach((button) => { button.disabled = !hasData; });
     setAttachmentExportStatus(hasData ? "請選擇要下載的附卷格式。" : "尚未匯入資料，無法產生附卷檔案。", !hasData);
@@ -1036,12 +1244,13 @@
   }
 
   async function downloadAttachmentXlsx() {
-    if (!state.currentWorkspace || !state.callRecords.length || !AttachmentExport) return;
+    const workspace = analysisWorkspace();
+    if (!workspace?.records?.length || !AttachmentExport) return;
     setAttachmentExportBusy(true);
     setAttachmentExportStatus("正在產生六分頁 XLSX，資料只在瀏覽器本機處理。", false);
     try {
       await loadAttachmentAsset("exceljs");
-      const report = buildAttachmentReport(state.currentWorkspace, state.phoneNotes);
+      const report = buildAttachmentReport(workspace, state.phoneNotes, new Date().toISOString(), attachmentReportOptions());
       const chartDataUrl = createHourChartDataUrl(report.hours);
       const bytes = await AttachmentExport.createAttachmentXlsx(report, globalThis.ExcelJS, chartDataUrl);
       downloadBlob(`附卷檔案-${attachmentFileStamp()}.xlsx`, bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -1054,7 +1263,8 @@
   }
 
   async function downloadAttachmentPdf(sectionKey) {
-    if (!state.currentWorkspace || !state.callRecords.length || !AttachmentExport) return;
+    const workspace = analysisWorkspace();
+    if (!workspace?.records?.length || !AttachmentExport) return;
     const section = AttachmentExport.PDF_SECTIONS.find((item) => item.key === sectionKey);
     if (!section) return;
     setAttachmentExportBusy(true);
@@ -1063,7 +1273,7 @@
       await loadAttachmentAsset("pdfLib");
       await loadAttachmentAsset("fontkit");
       await loadAttachmentAsset("fontData");
-      const report = buildAttachmentReport(state.currentWorkspace, state.phoneNotes);
+      const report = buildAttachmentReport(workspace, state.phoneNotes, new Date().toISOString(), attachmentReportOptions());
       const fontBytes = base64ToBytes(globalThis.PhoneExportFontBase64);
       const bytes = await AttachmentExport.createAttachmentPdf(report, sectionKey, globalThis.PDFLib, globalThis.fontkit, fontBytes);
       downloadBlob(`附卷-${section.label}-${attachmentFileStamp()}.pdf`, bytes, "application/pdf");
@@ -1080,6 +1290,15 @@
     document.querySelectorAll("[data-attachment-pdf]").forEach((button) => { button.disabled = busy; });
     if ($("attachmentExportCloseButton")) $("attachmentExportCloseButton").disabled = busy;
     $("attachmentExportModal")?.setAttribute("aria-busy", busy ? "true" : "false");
+  }
+
+  function attachmentReportOptions() {
+    if (!state.dateRange.active) return {};
+    return {
+      scope: "date_filter",
+      scope_label: `日期篩選：${state.dateRange.start} 至 ${state.dateRange.end}`,
+      date_range: { start: state.dateRange.start, end: state.dateRange.end },
+    };
   }
 
   function setAttachmentExportStatus(message, danger) {
@@ -1158,7 +1377,7 @@
     const bytes = toUint8Array(inputBytes);
     const lower = String(fileName || "").toLowerCase();
     if (lower.endsWith(".xml") || looksLikeXml(bytes)) {
-      return makeWorkspace(parseXmlWorkbook(fileName, decodeUtf8(bytes)));
+      return makeWorkspace(parseXmlWorkbook(fileName, decodeXmlBytes(bytes)));
     }
     if (!XLSX) throw new Error("XLSX parser is not available");
     return makeWorkspace(parseXlsxWorkbook(fileName, bytes));
@@ -1166,11 +1385,20 @@
 
   function parseXlsxWorkbook(fileName, bytes) {
     const workbook = XLSX.read(bytes, { type: "array", cellDates: false });
-    const sheets = workbook.SheetNames.map((title) => ({
-      title,
-      rows: XLSX.utils.sheet_to_json(workbook.Sheets[title], { header: 1, defval: "", raw: false, blankrows: false })
-        .map((values, index) => ({ rowNumber: index + 1, values: values.map(cellText) })),
-    }));
+    const sheets = workbook.SheetNames.map((title) => {
+      const displayRows = XLSX.utils.sheet_to_json(workbook.Sheets[title], { header: 1, defval: "", raw: false, blankrows: false });
+      const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[title], { header: 1, defval: "", raw: true, blankrows: false });
+      return {
+        title,
+        rows: displayRows.map((values, index) => ({
+          rowNumber: index + 1,
+          values: values.map(cellText),
+          rawValues: rawRows[index] || values,
+        })),
+      };
+    });
+    const fetOrder = fetOrderHeaders(sheets);
+    if (fetOrder.length) return parseFetOrderXlsx(fileName, sheets, fetOrder);
     const chtProsecutor = chtProsecutorHeaders(sheets);
     if (chtProsecutor) return parseChtProsecutor(fileName, sheets, chtProsecutor);
     const fetProsecutorCall = fetProsecutorCallHeaders(sheets);
@@ -1340,9 +1568,161 @@
     return parsed;
   }
 
+  function parseFetOrderXlsx(fileName, sheets, headers) {
+    const parsed = makeParsed({
+      fileName,
+      carrier: "遠傳電信",
+      sourceFormat: "fet_order_cdr_xlsx",
+      sheetName: headers.map((header) => header.sheet.title).join("、"),
+      headerRow: headers[0].rowNumber,
+      totalSourceRows: headers.reduce((sum, header) => sum + header.sheet.rows.length, 0),
+      subject: {},
+    });
+    const subjectValues = new Map();
+    const stationMap = new Map();
+    headers.forEach((header) => {
+      header.sheet.rows.forEach((row) => {
+        if (row.rowNumber <= header.rowNumber) return;
+        const display = rowDict(header.headers, row.values);
+        const raw = rowDict(header.headers, row.rawValues || row.values);
+        if (hasHeaders(row.values, FET_ORDER_HEADERS)) return;
+        mergeFetOrderSubject(subjectValues, raw);
+        if (!fetOrderRowHasCdr(raw)) return;
+        const record = fetOrderRecord(raw, row.rowNumber, header.sheet.title, parsed.warnings);
+        addStationRef(record, stationMap, "start", cleanCellId(raw.CellStartID), display.CellStarted || raw.CellStarted);
+        addStationRef(record, stationMap, "end", cleanCellId(raw.CellEndID), display.CellEnded || raw.CellEnded);
+        parsed.records.push(record);
+      });
+    });
+    parsed.subject = subjectFromValueSets(subjectValues);
+    parsed.base_stations = Array.from(stationMap.values());
+    return parsed;
+  }
+
+  function fetOrderRowHasCdr(data) {
+    return ["CallStartTimeStamp", "Duration", "CallDirection", "CallingNumber", "CalledNumber", "IMEI", "CallFwd", "CellStartID", "CellEndID"]
+      .some((key) => cellText(data[key]));
+  }
+
+  function fetOrderRecord(data, rowNumber, sourceSheet, warnings) {
+    const rawOccurredAt = cellText(data.CallStartTimeStamp);
+    const occurredAt = normalizeDatetime(rawOccurredAt);
+    if (rawOccurredAt && !occurredAt) warnings.push(`第 ${rowNumber} 列的通聯時間無法正規化，已保留原文。`);
+    const mapped = fetOrderPhonesAndDirection(data);
+    const callDirection = cellText(data.CallDirection).toUpperCase();
+    const callType = FET_ORDER_CALL_TYPES[callDirection] || (callDirection ? `其他（${callDirection}）` : "");
+    const callFwd = cellText(data.CallFwd);
+    return baseRecord({
+      row_number: rowNumber,
+      source_sheet: sourceSheet,
+      occurred_at: occurredAt || rawOccurredAt,
+      duration_seconds: toInt(data.Duration),
+      call_type: callType,
+      direction: mapped.direction,
+      target_phone: mapped.targetPhone,
+      counterparty_phone: mapped.counterpartyPhone,
+      imei: exactNumericText(data.IMEI),
+      note: callFwd ? `指定轉接：${callFwd}` : "",
+    });
+  }
+
+  function fetOrderPhonesAndDirection(data) {
+    const caller = normalizePhoneText(data.CallingNumber);
+    const callee = normalizePhoneText(data.CalledNumber);
+    const queryType = cellText(data.QueType);
+    const queryPhone = queryType === "1" ? normalizePhoneText(data.QueObject) : "";
+    if (queryPhone && caller === queryPhone && callee !== queryPhone) {
+      return { direction: "outbound", targetPhone: caller, counterpartyPhone: callee };
+    }
+    if (queryPhone && callee === queryPhone && caller !== queryPhone) {
+      return { direction: "inbound", targetPhone: callee, counterpartyPhone: caller };
+    }
+    const code = cellText(data.CallDirection).toUpperCase();
+    const direction = ["O", "2"].includes(code) ? "outbound" : ["T", "I", "1", "9"].includes(code) ? "inbound" : "other";
+    if (direction === "inbound") return { direction, targetPhone: callee || queryPhone || caller, counterpartyPhone: caller && caller !== callee ? caller : "" };
+    return { direction, targetPhone: caller || queryPhone || callee, counterpartyPhone: callee && callee !== caller ? callee : "" };
+  }
+
+  function mergeFetOrderSubject(subjectValues, data) {
+    const start = normalizeOrderRangeEndpoint(data.StartDate, data.StartTime);
+    const end = normalizeOrderRangeEndpoint(data.EndDate, data.EndTime);
+    const queryType = cellText(data.QueType);
+    const entries = {
+      "文號": data.DocNo,
+      "案件狀態": data.Status,
+      "案件備註": data.Comment,
+      "查詢序號": data.Seq,
+      "查詢狀態": data.Status2,
+      "調閱類型": FET_ORDER_QUERY_TYPES[queryType] || data.QueType,
+      "調閱目標": queryType === "1" ? normalizePhoneText(data.QueObject) : exactNumericText(data.QueObject),
+      "查詢方向": FET_ORDER_QUERY_DIRECTIONS[cellText(data.QueDirection)] || data.QueDirection,
+      "查詢起始": start,
+      "查詢結束": end,
+      "結果類型": FET_ORDER_RESULT_TYPES[cellText(data.ResultType)] || data.ResultType,
+      "查詢備註": data.Memo,
+    };
+    mergeSubjectMetadata(subjectValues, entries);
+  }
+
+  function normalizeOrderRangeEndpoint(dateValue, timeValue) {
+    const dateNumber = Number(dateValue);
+    const timeNumber = Number(timeValue);
+    if (Number.isFinite(dateNumber) && dateNumber >= 20000 && dateNumber <= 60000) {
+      return excelSerialDatetime(dateNumber + (Number.isFinite(timeNumber) && timeNumber >= 0 && timeNumber < 1 ? timeNumber : 0));
+    }
+    const dateText = cellText(dateValue);
+    const timeText = cellText(timeValue);
+    return normalizeDatetime(`${dateText}${dateText && timeText ? " " : ""}${timeText}`) || [dateText, timeText].filter(Boolean).join(" ");
+  }
+
+  function exactNumericText(value) {
+    const text = cellText(value);
+    if (!text) return "";
+    if (/^[+-]?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(text)) {
+      const number = Number(text);
+      if (Number.isFinite(number) && Number.isInteger(number)) return number.toLocaleString("fullwide", { useGrouping: false, maximumFractionDigits: 0 });
+    }
+    return text;
+  }
+
   function parseXmlWorkbook(fileName, xml) {
+    if (isFetOrderXml(xml)) return parseFetOrderXml(fileName, xml);
     if (isTwmCallXml(xml)) return parseTwmCallXml(fileName, xml);
-    return parseTwmCspXml(fileName, xml);
+    if (firstXmlBlock(xml, "CUSTOMERINFO") || firstXmlBlock(xml, "CELLINFO")) return parseTwmCspXml(fileName, xml);
+    throw new Error("找不到支援的 XML 結構");
+  }
+
+  function parseFetOrderXml(fileName, xml) {
+    const summary = xmlChildren(firstXmlBlock(xml, "SummaryInfo"));
+    const parsed = makeParsed({
+      fileName,
+      carrier: "遠傳電信",
+      sourceFormat: "fet_order_cdr_xml",
+      sheetName: "XML",
+      headerRow: 0,
+      totalSourceRows: iterXmlBlocks(xml, "CDRInfo").length,
+      subject: {},
+    });
+    const subjectValues = new Map();
+    mergeFetOrderSubject(subjectValues, summary);
+    const stationMap = new Map();
+    let rowNumber = 0;
+    iterXmlBlocks(xml, "Record").forEach((recordBlock) => {
+      const query = xmlChildren(firstXmlBlock(recordBlock, "QueryInfo"));
+      mergeFetOrderSubject(subjectValues, query);
+      iterXmlBlocks(recordBlock, "CDRInfo").forEach((cdrBlock) => {
+        rowNumber += 1;
+        const cdr = { ...query, ...xmlChildren(cdrBlock) };
+        if (!fetOrderRowHasCdr(cdr)) return;
+        const record = fetOrderRecord(cdr, rowNumber, "XML", parsed.warnings);
+        addStationRef(record, stationMap, "start", cleanCellId(cdr.CellStartID), cdr.CellStarted);
+        addStationRef(record, stationMap, "end", cleanCellId(cdr.CellEndID), cdr.CellEnded);
+        parsed.records.push(record);
+      });
+    });
+    parsed.subject = subjectFromValueSets(subjectValues);
+    parsed.base_stations = Array.from(stationMap.values());
+    return parsed;
   }
 
   function makeParsed({ fileName, carrier, sourceFormat, sheetName, headerRow, totalSourceRows, subject }) {
@@ -1962,6 +2342,18 @@
     return null;
   }
 
+  function fetOrderHeaders(sheets) {
+    const headers = [];
+    sheets.forEach((sheet) => {
+      for (const row of sheet.rows.slice(0, 100)) {
+        if (!hasHeaders(row.values, FET_ORDER_HEADERS)) continue;
+        headers.push({ sheet, rowNumber: row.rowNumber, headers: row.values });
+        break;
+      }
+    });
+    return headers;
+  }
+
   function canonicalHeaderText(value) {
     return cellText(value).replace(/\s+/g, "");
   }
@@ -2190,6 +2582,13 @@
     return Boolean(firstXmlBlock(xml, "通聯資料")) || /<[^>]*查詢單[\s>]/.test(xml) && (Boolean(firstXmlBlock(xml, "通聯記錄查詢條件")) || Boolean(firstXmlBlock(xml, "電話號碼")) || Boolean(firstXmlBlock(xml, "電信業者")));
   }
 
+  function isFetOrderXml(xml) {
+    return Boolean(firstXmlBlock(xml, "Order"))
+      && Boolean(firstXmlBlock(xml, "SummaryInfo"))
+      && Boolean(firstXmlBlock(xml, "QueryInfo"))
+      && Boolean(firstXmlBlock(xml, "CDRInfo"));
+  }
+
   function iterXmlBlocks(xml, name) {
     const escaped = escapeRegExp(name);
     const re = new RegExp(`<(?:[\\w.-]+:)?${escaped}(?=[\\s>/])[^>]*>[\\s\\S]*?<\\/(?:[\\w.-]+:)?${escaped}>`, "g");
@@ -2344,8 +2743,8 @@
       return "";
     }
     text = text.replace(/\//g, "-").replace(/\s+/g, " ").trim();
-    let match = text.match(/^(\d{4}-\d{1,2}-\d{1,2})[ T](\d{1,2}:\d{1,2}:\d{1,2})$/);
-    if (!match) match = text.match(/^(\d{4}-\d{1,2}-\d{1,2})(\d{1,2}:\d{1,2}:\d{1,2})$/);
+    let match = text.match(/^(\d{4}-\d{1,2}-\d{1,2})[ T](\d{1,2}:\d{1,2}:\d{1,2})(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/);
+    if (!match) match = text.match(/^(\d{4}-\d{1,2}-\d{1,2})(\d{1,2}:\d{1,2}:\d{1,2})(?:\.\d+)?$/);
     if (!match) return isIsoDatetime(text) ? text : "";
     const [year, month, day] = match[1].split("-").map(Number);
     const [hour, minute, second] = match[2].split(":").map(Number);
@@ -2497,7 +2896,7 @@
     }).sort((a, b) => b.count - a.count || a.address.localeCompare(b.address, "zh-Hant", { numeric: true }));
   }
 
-  function buildAttachmentReport(workspace, phoneNotes = {}, exportedAt = new Date().toISOString()) {
+  function buildAttachmentReport(workspace, phoneNotes = {}, exportedAt = new Date().toISOString(), options = {}) {
     const normalized = normalizeWorkspace(workspace);
     if (!normalized) throw new Error("沒有可匯出的 workspace");
     const notes = normalizePhoneNotes(phoneNotes);
@@ -2516,7 +2915,11 @@
     return {
       meta: {
         exported_at: exportedAt,
-        scope: "complete_import",
+        scope: options.scope || "complete_import",
+        scope_label: options.scope_label || "完整匯入資料",
+        date_range: options.date_range && typeof options.date_range === "object"
+          ? { start: cellText(options.date_range.start), end: cellText(options.date_range.end) }
+          : null,
         source_files: normalized.case.source_files || uniqueTextValues(records.map((record) => record.source_file)),
       },
       hours: hours.map((item) => ({ ...item, percent: hourTotal ? (item.count / hourTotal) * 100 : 0 })),
@@ -2591,6 +2994,32 @@
   function decodeUtf8(bytes) {
     if (typeof TextDecoder !== "undefined") return new TextDecoder("utf-8").decode(bytes);
     return Buffer.from(bytes).toString("utf8");
+  }
+
+  function decodeXmlBytes(bytes) {
+    const input = toUint8Array(bytes);
+    let encoding = "utf-8";
+    let offset = 0;
+    if (input[0] === 0xef && input[1] === 0xbb && input[2] === 0xbf) offset = 3;
+    else if (input[0] === 0xff && input[1] === 0xfe) { encoding = "utf-16le"; offset = 2; }
+    else if (input[0] === 0xfe && input[1] === 0xff) { encoding = "utf-16be"; offset = 2; }
+    else if (input[0] === 0x3c && input[1] === 0x00) encoding = "utf-16le";
+    else if (input[0] === 0x00 && input[1] === 0x3c) encoding = "utf-16be";
+    else {
+      const declaration = Array.from(input.slice(0, 512), (byte) => byte < 128 ? String.fromCharCode(byte) : " ").join("");
+      const match = declaration.match(/<\?xml[^>]*encoding\s*=\s*["']\s*([^"']+)\s*["']/i);
+      const declared = cellText(match?.[1]).toLowerCase().replace(/_/g, "-");
+      if (["big5", "big-5", "cp950", "windows-950"].includes(declared)) encoding = "big5";
+      else if (["utf-16", "utf-16le", "unicode"].includes(declared)) encoding = "utf-16le";
+      else if (declared === "utf-16be") encoding = "utf-16be";
+    }
+    try {
+      if (typeof TextDecoder !== "undefined") return new TextDecoder(encoding).decode(input.slice(offset));
+    } catch (_error) {
+      throw new Error("XML 編碼不受此瀏覽器支援");
+    }
+    if (encoding !== "utf-8") throw new Error("XML 編碼不受此環境支援");
+    return Buffer.from(input.slice(offset)).toString("utf8");
   }
 
   function cellText(value) {
@@ -2688,6 +3117,8 @@
     computeAddressHotspots,
     classifyTaiwanCounty,
     computeTaiwanCountyStats,
+    computeDateRangeBounds,
+    filterRecordsByDateRange,
     buildSubmissionCsv,
     collectSubmissionPhones,
     collectUniqueImeis,

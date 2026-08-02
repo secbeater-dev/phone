@@ -168,6 +168,34 @@ body[data-theme="dark"] .sidebar { background: rgba(23, 23, 23, 0.96); }
   border-color: var(--accent);
   outline: none;
 }
+.date-filter-panel[hidden] { display: none; }
+.date-filter-trigger {
+  display: flex;
+  width: 100%;
+  min-height: 56px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+}
+.date-filter-trigger:hover,
+.date-filter-trigger:focus-visible { border-color: var(--ink); outline: 2px solid color-mix(in srgb, var(--ink) 16%, transparent); }
+.date-filter-icon { display: grid; flex: 0 0 24px; place-items: center; }
+.date-filter-icon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+.date-filter-copy { display: grid; min-width: 0; gap: 2px; }
+.date-filter-copy small { overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-tool-button.active {
   border-color: var(--accent);
   outline: 2px solid rgba(220, 38, 38, 0.18);
@@ -199,10 +227,12 @@ body.sidebar-collapsed .nav-item strong,
 body.sidebar-collapsed .sidebar-panel h3,
 body.sidebar-collapsed .sidebar-panel .message,
 body.sidebar-collapsed .import-results,
+body.sidebar-collapsed .date-filter-copy,
 body.sidebar-collapsed .tool-label { display: none; }
 body.sidebar-collapsed .sidebar-panel { padding: 10px; }
 body.sidebar-collapsed .sidebar-panel .primary-button { min-width: 46px; padding: 0; font-size: 0; }
 body.sidebar-collapsed .sidebar-panel .primary-button::before { content: "+"; font-size: 22px; font-weight: 900; line-height: 1; }
+body.sidebar-collapsed .date-filter-trigger { min-width: 46px; min-height: 46px; justify-content: center; padding: 0; }
 body.sidebar-collapsed .brand-mark { width: 44px; height: 44px; }
 
 .workspace { min-width: 0; padding: 24px; }
@@ -722,6 +752,37 @@ body[data-theme="dark"] .hotspot-times { background: #111111; }
   line-height: 1.75;
 }
 .usage-modal-main a { color: var(--accent-strong); font-weight: 800; }
+.date-filter-card {
+  display: grid;
+  gap: 18px;
+  width: min(470px, 100%);
+  padding: 22px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 22px 64px rgba(0, 0, 0, 0.32);
+}
+.date-filter-heading { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+.date-filter-heading h2 { font-size: 28px; }
+.date-filter-heading p { margin-top: 5px; line-height: 1.5; }
+.date-filter-fields { display: grid; gap: 16px; padding: 18px 0; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); }
+.date-filter-field { display: grid; gap: 8px; font-weight: 800; }
+.date-filter-field input {
+  width: 100%;
+  min-height: 46px;
+  padding: 8px 10px;
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--ink);
+  color-scheme: light dark;
+  font: inherit;
+}
+.date-filter-rule { height: 1px; background: var(--line); }
+.date-filter-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.date-filter-actions .primary-button { border-color: var(--ink); background: var(--ink); color: var(--panel); }
+.date-filter-actions .secondary-button { border-color: var(--ink); background: var(--panel); color: var(--ink); }
 .county-filter-card {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
@@ -969,6 +1030,10 @@ body[data-theme="dark"] .hotspot-times { background: #111111; }
   .usage-modal { padding: 12px; }
   .usage-modal-card { grid-template-columns: 1fr; max-height: calc(100vh - 24px); }
   .county-filter-card { max-height: calc(100vh - 24px); padding: 14px; }
+  .date-filter-card { padding: 16px; }
+  .date-filter-heading { display: grid; }
+  .date-filter-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .date-filter-actions .primary-button { grid-column: 1 / -1; }
   .county-filter-heading { display: grid; }
   .county-filter-table-head,
   .county-filter-row { grid-template-columns: minmax(118px, 1fr) 64px 64px; }

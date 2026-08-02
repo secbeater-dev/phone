@@ -70,7 +70,7 @@
     sheet.getRow(1).height = 30;
     sheet.mergeCells(2, 1, 2, maxColumn);
     const scope = sheet.getCell(2, 1);
-    scope.value = `匯出範圍：完整匯入資料｜匯出時間：${formatExportTime(report.meta.exported_at)}`;
+    scope.value = `匯出範圍：${safeText(report.meta.scope_label || "完整匯入資料")}｜匯出時間：${formatExportTime(report.meta.exported_at)}`;
     scope.font = { name: "Microsoft JhengHei", size: 10, color: COLORS.muted };
     scope.fill = solidFill(COLORS.surface);
     scope.alignment = { vertical: "middle", wrapText: true };
@@ -318,7 +318,7 @@
     page.drawText(first ? ctx.title : `${ctx.title}（續）`, {
       x: ctx.margin, y: height - ctx.margin - 18, size: 15, font: ctx.font, color: ctx.ink,
     });
-    page.drawText(`完整匯入資料｜${formatExportTime(ctx.meta.exported_at)}`, {
+    page.drawText(`${safeText(ctx.meta.scope_label || "完整匯入資料")}｜${formatExportTime(ctx.meta.exported_at)}`, {
       x: ctx.margin, y: height - ctx.margin - 34, size: 7.5, font: ctx.font, color: ctx.muted,
     });
     ctx.y = height - ctx.margin - 48;
