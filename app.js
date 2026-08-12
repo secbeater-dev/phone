@@ -18,11 +18,13 @@
   };
   const LOCAL_EXPORT_VERSION = "phone-workbench-local-settings-v1";
   const CALL_PAGE_SIZE = 500;
+  const MULTI_LOCATION_PAGE_SIZE = 500;
+  const MULTI_LOCATION_WINDOW_MINUTES = 30;
   const ATTACHMENT_ASSETS = {
-    exceljs: { src: "./vendor/exceljs.min.js?v=20260802-fet-order-date-filter-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
-    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260802-fet-order-date-filter-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
-    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260802-fet-order-date-filter-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
-    fontData: { src: "./vendor/open-huninn-data.js?v=20260802-fet-order-date-filter-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
+    exceljs: { src: "./vendor/exceljs.min.js?v=20260812-multi-number-location-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
+    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260812-multi-number-location-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
+    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260812-multi-number-location-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
+    fontData: { src: "./vendor/open-huninn-data.js?v=20260812-multi-number-location-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
   };
   const loadedAttachmentAssets = new Map();
   const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}-${String(hour + 1).padStart(2, "0")}`);
@@ -42,6 +44,7 @@
     calls: "通聯列表",
     profile: "用戶資料",
     stats: "電話統計",
+    multiLocation: "多門號位置",
     hours: "時間分布圖",
     submission: "電話投單",
     export: "資料匯出",
@@ -85,6 +88,30 @@
   ];
   const UNKNOWN_COUNTY = "未辨識";
   const ALL_COUNTY_FILTER_KEYS = [...TAIWAN_COUNTIES, UNKNOWN_COUNTY];
+  const TAIWAN_ADMINISTRATIVE_DISTRICTS = {
+    "臺北市": "松山區|信義區|大安區|中山區|中正區|大同區|萬華區|文山區|南港區|內湖區|士林區|北投區".split("|"),
+    "新北市": "板橋區|三重區|中和區|永和區|新莊區|新店區|樹林區|鶯歌區|三峽區|淡水區|汐止區|瑞芳區|土城區|蘆洲區|五股區|泰山區|林口區|深坑區|石碇區|坪林區|三芝區|石門區|八里區|平溪區|雙溪區|貢寮區|金山區|萬里區|烏來區".split("|"),
+    "桃園市": "桃園區|中壢區|大溪區|楊梅區|蘆竹區|大園區|龜山區|八德區|龍潭區|平鎮區|新屋區|觀音區|復興區".split("|"),
+    "臺中市": "中區|東區|南區|西區|北區|西屯區|南屯區|北屯區|豐原區|東勢區|大甲區|清水區|沙鹿區|梧棲區|后里區|神岡區|潭子區|大雅區|新社區|石岡區|外埔區|大安區|烏日區|大肚區|龍井區|霧峰區|太平區|大里區|和平區".split("|"),
+    "臺南市": "新營區|鹽水區|白河區|柳營區|後壁區|東山區|麻豆區|下營區|六甲區|官田區|大內區|佳里區|學甲區|西港區|七股區|將軍區|北門區|新化區|善化區|新市區|安定區|山上區|玉井區|楠西區|南化區|左鎮區|仁德區|歸仁區|關廟區|龍崎區|永康區|東區|南區|北區|安南區|安平區|中西區".split("|"),
+    "高雄市": "鹽埕區|鼓山區|左營區|楠梓區|三民區|新興區|前金區|苓雅區|前鎮區|旗津區|小港區|鳳山區|林園區|大寮區|大樹區|大社區|仁武區|鳥松區|岡山區|橋頭區|燕巢區|田寮區|阿蓮區|路竹區|湖內區|茄萣區|永安區|彌陀區|梓官區|旗山區|美濃區|六龜區|甲仙區|杉林區|內門區|茂林區|桃源區|那瑪夏區".split("|"),
+    "基隆市": "中正區|七堵區|暖暖區|仁愛區|中山區|安樂區|信義區".split("|"),
+    "新竹市": "東區|北區|香山區".split("|"),
+    "嘉義市": "東區|西區".split("|"),
+    "新竹縣": "竹北市|竹東鎮|新埔鎮|關西鎮|湖口鄉|新豐鄉|芎林鄉|橫山鄉|北埔鄉|寶山鄉|峨眉鄉|尖石鄉|五峰鄉".split("|"),
+    "苗栗縣": "苗栗市|苑裡鎮|通霄鎮|竹南鎮|頭份市|後龍鎮|卓蘭鎮|大湖鄉|公館鄉|銅鑼鄉|南庄鄉|頭屋鄉|三義鄉|西湖鄉|造橋鄉|三灣鄉|獅潭鄉|泰安鄉".split("|"),
+    "彰化縣": "彰化市|鹿港鎮|和美鎮|線西鄉|伸港鄉|福興鄉|秀水鄉|花壇鄉|芬園鄉|員林市|溪湖鎮|田中鎮|大村鄉|埔鹽鄉|埔心鄉|永靖鄉|社頭鄉|二水鄉|北斗鎮|二林鎮|田尾鄉|埤頭鄉|芳苑鄉|大城鄉|竹塘鄉|溪州鄉".split("|"),
+    "南投縣": "南投市|埔里鎮|草屯鎮|竹山鎮|集集鎮|名間鄉|鹿谷鄉|中寮鄉|魚池鄉|國姓鄉|水里鄉|信義鄉|仁愛鄉".split("|"),
+    "雲林縣": "斗六市|斗南鎮|虎尾鎮|西螺鎮|土庫鎮|北港鎮|古坑鄉|大埤鄉|莿桐鄉|林內鄉|二崙鄉|崙背鄉|麥寮鄉|東勢鄉|褒忠鄉|臺西鄉|元長鄉|四湖鄉|口湖鄉|水林鄉".split("|"),
+    "嘉義縣": "太保市|朴子市|布袋鎮|大林鎮|民雄鄉|溪口鄉|新港鄉|六腳鄉|東石鄉|義竹鄉|鹿草鄉|水上鄉|中埔鄉|竹崎鄉|梅山鄉|番路鄉|大埔鄉|阿里山鄉".split("|"),
+    "屏東縣": "屏東市|潮州鎮|東港鎮|恆春鎮|萬丹鄉|長治鄉|麟洛鄉|九如鄉|里港鄉|鹽埔鄉|高樹鄉|萬巒鄉|內埔鄉|竹田鄉|新埤鄉|枋寮鄉|新園鄉|崁頂鄉|林邊鄉|南州鄉|佳冬鄉|琉球鄉|車城鄉|滿州鄉|枋山鄉|三地門鄉|霧臺鄉|瑪家鄉|泰武鄉|來義鄉|春日鄉|獅子鄉|牡丹鄉".split("|"),
+    "宜蘭縣": "宜蘭市|羅東鎮|蘇澳鎮|頭城鎮|礁溪鄉|壯圍鄉|員山鄉|冬山鄉|五結鄉|三星鄉|大同鄉|南澳鄉".split("|"),
+    "花蓮縣": "花蓮市|鳳林鎮|玉里鎮|新城鄉|吉安鄉|壽豐鄉|光復鄉|豐濱鄉|瑞穗鄉|富里鄉|秀林鄉|萬榮鄉|卓溪鄉".split("|"),
+    "臺東縣": "臺東市|成功鎮|關山鎮|卑南鄉|鹿野鄉|池上鄉|東河鄉|長濱鄉|太麻里鄉|大武鄉|綠島鄉|海端鄉|延平鄉|金峰鄉|達仁鄉|蘭嶼鄉".split("|"),
+    "澎湖縣": "馬公市|湖西鄉|白沙鄉|西嶼鄉|望安鄉|七美鄉".split("|"),
+    "金門縣": "金城鎮|金沙鎮|金湖鎮|金寧鄉|烈嶼鄉|烏坵鄉".split("|"),
+    "連江縣": "南竿鄉|北竿鄉|莒光鄉|東引鄉".split("|"),
+  };
 
   const state = {
     view: "hours",
@@ -102,6 +129,10 @@
     dateRangeBounds: { start: "", end: "" },
     dateRange: { start: "", end: "", active: false },
     dateRangeDraft: { start: "", end: "" },
+    multiLocationWorkspace: null,
+    multiLocationMatches: [],
+    multiLocationExcluded: { missing_phone: 0, invalid_time: 0, invalid_address: 0 },
+    multiLocationPage: 1,
     phoneNotes: {},
     callColumnWidths: {},
     theme: "light",
@@ -137,6 +168,14 @@
     });
     $("importButton")?.addEventListener("click", () => $("fileInput")?.click());
     $("fileInput")?.addEventListener("change", handleFileImport);
+    $("multiLocationImportButton")?.addEventListener("click", () => $("multiLocationFileInput")?.click());
+    $("multiLocationFileInput")?.addEventListener("change", handleMultiLocationImport);
+    $("multiLocationPrevPage")?.addEventListener("click", () => changeMultiLocationPage(-1));
+    $("multiLocationNextPage")?.addEventListener("click", () => changeMultiLocationPage(1));
+    $("multiLocationRows")?.addEventListener("input", (event) => {
+      const input = event.target.closest("[data-phone-note]");
+      if (input) updatePhoneNote(input.dataset.phoneNote, input.value, input);
+    });
     $("dateFilterButton")?.addEventListener("click", showDateFilterModal);
     $("dateFilterCloseButton")?.addEventListener("click", hideDateFilterModal);
     $("dateFilterCancelButton")?.addEventListener("click", hideDateFilterModal);
@@ -296,10 +335,25 @@
       else button.removeAttribute("aria-current");
     });
     $("pageTitle").textContent = VIEW_TITLES[view];
+    syncPrimarySidebarPanels();
     if (view === "calls") renderTwoWayCalls();
     if (view === "profile") renderProfileView();
     if (view === "stats") renderStatsView();
     if (view === "hours") renderHoursView();
+    if (view === "multiLocation") renderMultiLocationView();
+  }
+
+  function syncPrimarySidebarPanels() {
+    if (typeof document === "undefined") return;
+    const multiLocationActive = state.view === "multiLocation";
+    const importPanel = $("mainImportPanel");
+    if (importPanel) importPanel.hidden = multiLocationActive;
+    if (multiLocationActive) {
+      const datePanel = $("dateFilterPanel");
+      if (datePanel) datePanel.hidden = true;
+    } else {
+      syncDateFilterPanel();
+    }
   }
 
   function restoreSettings() {
@@ -358,6 +412,55 @@
       $("importStatus").textContent = "所有檔案均匯入失敗，原資料未變更。";
     }
     $("fileInput").value = "";
+  }
+
+  async function handleMultiLocationImport(event) {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    $("multiLocationImportStatus").textContent = `匯入 ${files.length} 個檔案中...`;
+    $("multiLocationImportResults").innerHTML = "";
+    const workspaces = [];
+    let failures = 0;
+    for (const file of files) {
+      try {
+        const content = await readFileArrayBuffer(file);
+        const workspace = parseImportFile(file.name, content);
+        workspaces.push(workspace);
+        appendMultiLocationImportResult(workspace.case);
+      } catch (error) {
+        failures += 1;
+        appendMultiLocationImportError(file.name, error);
+      }
+    }
+    if (workspaces.length) {
+      const workspace = mergeWorkspaces(workspaces);
+      const analysis = computeMultiNumberLocationMatches(workspace, { windowMinutes: MULTI_LOCATION_WINDOW_MINUTES });
+      state.multiLocationWorkspace = workspace;
+      state.multiLocationMatches = analysis.matches;
+      state.multiLocationExcluded = analysis.excluded;
+      state.multiLocationPage = 1;
+      renderMultiLocationView();
+      $("multiLocationImportStatus").textContent = failures
+        ? "部分檔案匯入完成；失敗項目請見下方。"
+        : "匯入與位置比對完成。";
+    } else {
+      $("multiLocationImportStatus").textContent = "所有檔案均匯入失敗，原多門號位置資料未變更。";
+    }
+    $("multiLocationFileInput").value = "";
+  }
+
+  function appendMultiLocationImportResult(item) {
+    const div = document.createElement("div");
+    div.className = "import-result-item";
+    div.innerHTML = `<strong>${escapeHtml(item.source_file || "匯入檔案")}</strong><span>${escapeHtml(item.source_format || "")}</span><span>解析完成</span>`;
+    $("multiLocationImportResults").appendChild(div);
+  }
+
+  function appendMultiLocationImportError(name, error) {
+    const div = document.createElement("div");
+    div.className = "import-result-item danger-text";
+    div.textContent = `${name} 匯入失敗：${error.message}`;
+    $("multiLocationImportResults").appendChild(div);
   }
 
   function readFileArrayBuffer(file) {
@@ -815,6 +918,51 @@
     ].join("");
   }
 
+  function renderMultiLocationView() {
+    const rowsTarget = $("multiLocationRows");
+    if (!rowsTarget) return;
+    const matches = state.multiLocationMatches || [];
+    const totalPages = Math.max(1, Math.ceil(matches.length / MULTI_LOCATION_PAGE_SIZE));
+    state.multiLocationPage = Math.min(Math.max(1, state.multiLocationPage), totalPages);
+    const startIndex = (state.multiLocationPage - 1) * MULTI_LOCATION_PAGE_SIZE;
+    const pageRows = matches.slice(startIndex, startIndex + MULTI_LOCATION_PAGE_SIZE);
+    const excluded = Object.values(state.multiLocationExcluded || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+    const summary = $("multiLocationSummary");
+    if (summary) summary.textContent = excluded
+      ? `符合 ${matches.length.toLocaleString()} 筆｜排除 ${excluded.toLocaleString()} 項無法比對資料`
+      : `符合 ${matches.length.toLocaleString()} 筆`;
+    if (!state.multiLocationWorkspace) {
+      rowsTarget.innerHTML = `<tr><td colspan="5" class="muted">尚未匯入資料。</td></tr>`;
+    } else if (!pageRows.length) {
+      rowsTarget.innerHTML = `<tr><td colspan="5" class="muted">目前沒有不同門號在同一行政區 30 分鐘內出現的結果。</td></tr>`;
+    } else {
+      rowsTarget.innerHTML = pageRows.map((match) => `<tr>
+        <td>${escapeHtml(formatMultiLocationTimeRange(match.start_at, match.end_at))}</td>
+        <td>${escapeHtml(match.county)}</td>
+        <td>${escapeHtml(match.district)}</td>
+        <td><div class="multi-location-phone-list">${match.phones.map((phone) => `<span class="phone-value">${escapeHtml(phone)}</span>`).join("")}</div></td>
+        <td><div class="multi-location-note-list">${match.phones.map((phone) => `<label><span>${escapeHtml(phone)}</span><input class="phone-note-input" data-phone-note="${escapeHtml(phone)}" value="${escapeHtml(phoneNote(phone))}" aria-label="備註(只存瀏覽器) ${escapeHtml(phone)}" /></label>`).join("")}</div></td>
+      </tr>`).join("");
+    }
+    const pageSummary = $("multiLocationPageSummary");
+    if (pageSummary) pageSummary.textContent = matches.length
+      ? `第 ${state.multiLocationPage.toLocaleString()} / ${totalPages.toLocaleString()} 頁，共 ${matches.length.toLocaleString()} 筆`
+      : "共 0 筆";
+    if ($("multiLocationPrevPage")) $("multiLocationPrevPage").disabled = state.multiLocationPage <= 1;
+    if ($("multiLocationNextPage")) $("multiLocationNextPage").disabled = state.multiLocationPage >= totalPages;
+  }
+
+  function changeMultiLocationPage(delta) {
+    state.multiLocationPage += Number(delta || 0);
+    renderMultiLocationView();
+  }
+
+  function formatMultiLocationTimeRange(start, end) {
+    const startText = cellText(start).replace("T", " ");
+    const endText = cellText(end).replace("T", " ");
+    return startText === endText ? startText : `${startText} ～ ${endText}`;
+  }
+
   function statsCard(title, rows) {
     return `<section class="stats-card"><h3>${escapeHtml(title)}</h3>${
       rows.length
@@ -1203,6 +1351,7 @@
         persistPhoneNotes();
         renderStatsView();
         renderTwoWayCalls();
+        renderMultiLocationView();
       }
       if (payload.callColumnWidths && typeof payload.callColumnWidths === "object") {
         state.callColumnWidths = normalizeColumnWidths(payload.callColumnWidths);
@@ -2841,6 +2990,114 @@
     return TAIWAN_COUNTIES.find((county) => normalized.includes(county)) || UNKNOWN_COUNTY;
   }
 
+  function classifyTaiwanAdministrativeArea(address) {
+    const normalized = cellText(address).replace(/\s+/g, "").replace(/台/g, "臺");
+    const county = TAIWAN_COUNTIES.find((item) => normalized.includes(item));
+    if (!county) return null;
+    const countyIndex = normalized.indexOf(county);
+    const tail = normalized.slice(countyIndex + county.length);
+    const districts = TAIWAN_ADMINISTRATIVE_DISTRICTS[county] || [];
+    const district = [...districts].sort((a, b) => b.length - a.length).find((item) => tail.startsWith(item));
+    return district ? { county, district } : null;
+  }
+
+  function computeMultiNumberLocationMatches(workspace, options = {}) {
+    const normalized = normalizeWorkspace(workspace);
+    const windowMinutes = Math.max(1, Number(options.windowMinutes || MULTI_LOCATION_WINDOW_MINUTES));
+    const windowMs = windowMinutes * 60 * 1000;
+    const excluded = { missing_phone: 0, invalid_time: 0, invalid_address: 0 };
+    if (!normalized) return { matches: [], excluded };
+    const stationMap = new Map(normalized.base_stations.map((station) => [station.station_key || stationKey(station), station]));
+    const groups = new Map();
+    let occurrenceSequence = 0;
+    normalized.records.forEach((record) => {
+      const phone = normalizePhoneText(record.target_phone);
+      if (!phone) {
+        excluded.missing_phone += 1;
+        return;
+      }
+      const occurredAt = normalizeDatetime(record.occurred_at);
+      const timeMs = multiLocationDatetimeMs(occurredAt);
+      if (!occurredAt || !Number.isFinite(timeMs)) {
+        excluded.invalid_time += 1;
+        return;
+      }
+      const seenAreas = new Set();
+      const refs = Array.isArray(record.base_refs) ? record.base_refs : [];
+      if (!refs.length) excluded.invalid_address += 1;
+      refs.forEach((ref) => {
+        const station = stationMap.get(ref.station_key);
+        if (!station || station.is_virtual) {
+          excluded.invalid_address += 1;
+          return;
+        }
+        const area = classifyTaiwanAdministrativeArea(station.address);
+        if (!area) {
+          excluded.invalid_address += 1;
+          return;
+        }
+        const areaKey = `${area.county}\u0000${area.district}`;
+        if (seenAreas.has(areaKey)) return;
+        seenAreas.add(areaKey);
+        const occurrence = {
+          id: `location-${occurrenceSequence += 1}`,
+          phone,
+          occurred_at: occurredAt,
+          time_ms: timeMs,
+          county: area.county,
+          district: area.district,
+        };
+        const rows = groups.get(areaKey) || [];
+        rows.push(occurrence);
+        groups.set(areaKey, rows);
+      });
+    });
+
+    const matches = [];
+    groups.forEach((events) => {
+      events.sort((a, b) => a.time_ms - b.time_ms || a.phone.localeCompare(b.phone, "zh-Hant", { numeric: true }) || a.id.localeCompare(b.id));
+      let endIndex = -1;
+      let lastAcceptedEnd = -1;
+      for (let startIndex = 0; startIndex < events.length; startIndex += 1) {
+        if (endIndex < startIndex) endIndex = startIndex;
+        const limit = events[startIndex].time_ms + windowMs;
+        while (endIndex + 1 < events.length && events[endIndex + 1].time_ms <= limit) endIndex += 1;
+        const windowEvents = events.slice(startIndex, endIndex + 1);
+        const phones = Array.from(new Set(windowEvents.map((event) => event.phone)))
+          .sort((a, b) => a.localeCompare(b, "zh-Hant", { numeric: true }));
+        if (phones.length < 2 || endIndex === lastAcceptedEnd) continue;
+        lastAcceptedEnd = endIndex;
+        matches.push({
+          start_at: windowEvents[0].occurred_at,
+          end_at: windowEvents[windowEvents.length - 1].occurred_at,
+          county: windowEvents[0].county,
+          district: windowEvents[0].district,
+          phones,
+          occurrence_count: windowEvents.length,
+        });
+      }
+    });
+    matches.sort((a, b) => String(a.start_at).localeCompare(String(b.start_at))
+      || TAIWAN_COUNTIES.indexOf(a.county) - TAIWAN_COUNTIES.indexOf(b.county)
+      || a.district.localeCompare(b.district, "zh-Hant", { numeric: true }));
+    return { matches, excluded };
+  }
+
+  function multiLocationDatetimeMs(value) {
+    const match = cellText(value).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/);
+    if (!match) return NaN;
+    const parts = match.slice(1).map(Number);
+    const time = Date.UTC(parts[0], parts[1] - 1, parts[2], parts[3], parts[4], parts[5]);
+    const date = new Date(time);
+    const valid = date.getUTCFullYear() === parts[0]
+      && date.getUTCMonth() + 1 === parts[1]
+      && date.getUTCDate() === parts[2]
+      && date.getUTCHours() === parts[3]
+      && date.getUTCMinutes() === parts[4]
+      && date.getUTCSeconds() === parts[5];
+    return valid ? time : NaN;
+  }
+
   function computeTaiwanCountyStats(hotspots) {
     const counts = new Map(ALL_COUNTY_FILTER_KEYS.map((county) => [county, 0]));
     (hotspots || []).forEach((hotspot) => {
@@ -3116,7 +3373,9 @@
     computeHourBuckets,
     computeAddressHotspots,
     classifyTaiwanCounty,
+    classifyTaiwanAdministrativeArea,
     computeTaiwanCountyStats,
+    computeMultiNumberLocationMatches,
     computeDateRangeBounds,
     filterRecordsByDateRange,
     buildSubmissionCsv,

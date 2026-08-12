@@ -397,6 +397,112 @@ test("county statistics use deduplicated hotspot occurrences and a stable denomi
   assert.ok(empty.every((row) => row.count === 0 && row.percent === 0));
 });
 
+function multiLocationWorkspace(records, stations) {
+  return {
+    case: {
+      source_file: "synthetic-location.xml",
+      source_files: ["synthetic-location.xml"],
+      carrier: "合成電信",
+      source_format: "synthetic_location",
+      sheet_name: "XML",
+      subject: {},
+      summary: {},
+    },
+    records: records.map((record, index) => ({
+      row_number: index + 1,
+      source_file: "synthetic-location.xml",
+      source_sheet: "XML",
+      occurred_at: record.occurred_at,
+      ended_at: "",
+      duration_seconds: 0,
+      call_type: "合成",
+      direction: "other",
+      target_phone: record.target_phone,
+      counterparty_phone: "",
+      imei: "",
+      imsi: "",
+      external_ip: "",
+      internal_ip: "",
+      upload_bytes: 0,
+      download_bytes: 0,
+      total_bytes: 0,
+      note: "",
+      base_refs: record.base_refs || [],
+    })),
+    base_stations: stations,
+    parse_warnings: [],
+  };
+}
+
+test("classifies current Taiwan county and administrative district pairs", () => {
+  assert.deepEqual(PhoneWorkbench.classifyTaiwanAdministrativeArea(" 台北市 大安區 合成路 1 號 "), { county: "臺北市", district: "大安區" });
+  assert.deepEqual(PhoneWorkbench.classifyTaiwanAdministrativeArea("臺中市大安區合成路2號"), { county: "臺中市", district: "大安區" });
+  assert.deepEqual(PhoneWorkbench.classifyTaiwanAdministrativeArea("新竹縣竹北市合成路3號"), { county: "新竹縣", district: "竹北市" });
+  assert.deepEqual(PhoneWorkbench.classifyTaiwanAdministrativeArea("嘉義縣阿里山鄉合成路4號"), { county: "嘉義縣", district: "阿里山鄉" });
+  assert.equal(PhoneWorkbench.classifyTaiwanAdministrativeArea("臺北市無法辨識地區"), null);
+  assert.equal(PhoneWorkbench.classifyTaiwanAdministrativeArea("大安區合成路5號"), null);
+});
+
+test("matches different target phones in the same district within an inclusive 30-minute window", () => {
+  const stations = [
+    { station_key: "taipei-a", address: "台北市大安區合成路1號", normalized_address: "台北市大安區合成路1號", is_virtual: false },
+    { station_key: "taipei-b", address: "臺北市大安區合成路2號", normalized_address: "臺北市大安區合成路2號", is_virtual: false },
+  ];
+  const workspace = multiLocationWorkspace([
+    { occurred_at: "2026-08-12T10:00:00", target_phone: "0900000001", base_refs: [{ station_key: "taipei-a" }, { station_key: "taipei-a" }] },
+    { occurred_at: "2026-08-12T10:30:00", target_phone: "0900000002", base_refs: [{ station_key: "taipei-b" }] },
+  ], stations);
+  const analysis = PhoneWorkbench.computeMultiNumberLocationMatches(workspace, { windowMinutes: 30 });
+
+  assert.equal(analysis.matches.length, 1);
+  assert.deepEqual(analysis.matches[0].phones, ["0900000001", "0900000002"]);
+  assert.equal(analysis.matches[0].county, "臺北市");
+  assert.equal(analysis.matches[0].district, "大安區");
+  assert.equal(analysis.matches[0].occurrence_count, 2);
+  assert.equal(analysis.matches[0].start_at, "2026-08-12T10:00:00");
+  assert.equal(analysis.matches[0].end_at, "2026-08-12T10:30:00");
+});
+
+test("does not match identical phones, different counties, or times beyond 30 minutes", () => {
+  const stations = [
+    { station_key: "taipei", address: "臺北市大安區合成路1號", normalized_address: "臺北市大安區合成路1號", is_virtual: false },
+    { station_key: "taichung", address: "臺中市大安區合成路2號", normalized_address: "臺中市大安區合成路2號", is_virtual: false },
+  ];
+  const workspace = multiLocationWorkspace([
+    { occurred_at: "2026-08-12T10:00:00", target_phone: "0900000011", base_refs: [{ station_key: "taipei" }] },
+    { occurred_at: "2026-08-12T10:05:00", target_phone: "0900000011", base_refs: [{ station_key: "taipei" }] },
+    { occurred_at: "2026-08-12T10:10:00", target_phone: "0900000012", base_refs: [{ station_key: "taichung" }] },
+    { occurred_at: "2026-08-12T10:35:01", target_phone: "0900000013", base_refs: [{ station_key: "taipei" }] },
+  ], stations);
+  const analysis = PhoneWorkbench.computeMultiNumberLocationMatches(workspace, { windowMinutes: 30 });
+  assert.equal(analysis.matches.length, 0);
+});
+
+test("keeps maximal overlapping 30-minute location windows and reports unusable items", () => {
+  const stations = [
+    { station_key: "valid", address: "臺北市中正區合成路1號", normalized_address: "臺北市中正區合成路1號", is_virtual: false },
+    { station_key: "unknown", address: "無法辨識合成地址", normalized_address: "無法辨識合成地址", is_virtual: false },
+    { station_key: "virtual", address: "VOWIFI", normalized_address: "VOWIFI", is_virtual: true },
+  ];
+  const workspace = multiLocationWorkspace([
+    { occurred_at: "2026-08-12T10:00:00", target_phone: "0900000021", base_refs: [{ station_key: "valid" }] },
+    { occurred_at: "2026-08-12T10:10:00", target_phone: "0900000022", base_refs: [{ station_key: "valid" }] },
+    { occurred_at: "2026-08-12T10:20:00", target_phone: "0900000023", base_refs: [{ station_key: "valid" }] },
+    { occurred_at: "2026-08-12T10:31:00", target_phone: "0900000024", base_refs: [{ station_key: "valid" }] },
+    { occurred_at: "2026-08-12T11:00:00", target_phone: "", base_refs: [{ station_key: "valid" }] },
+    { occurred_at: "invalid-date", target_phone: "0900000025", base_refs: [{ station_key: "valid" }] },
+    { occurred_at: "2026-08-12T11:10:00", target_phone: "0900000026", base_refs: [{ station_key: "unknown" }, { station_key: "virtual" }] },
+  ], stations);
+  const analysis = PhoneWorkbench.computeMultiNumberLocationMatches(workspace, { windowMinutes: 30 });
+
+  assert.equal(analysis.matches.length, 2);
+  assert.deepEqual(analysis.matches.map((row) => row.phones), [
+    ["0900000021", "0900000022", "0900000023"],
+    ["0900000022", "0900000023", "0900000024"],
+  ]);
+  assert.deepEqual(analysis.excluded, { missing_phone: 1, invalid_time: 1, invalid_address: 2 });
+});
+
 test("keeps the existing Taiwan Mobile parser behavior", () => {
   const rows = [
     ["通話類別", "目標電話", "對象電話", "始話日期時間", "通話時間(秒)", "基地台編號1/位置1"],
@@ -415,10 +521,10 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
   assert.doesNotMatch(html, /googletagmanager|gtag\s*\(/i);
   assert.doesNotMatch(html, /tellows\.tw/i);
-  assert.match(html, /href="\.\/styles\.css\?v=20260802-fet-order-date-filter-v1"/);
-  assert.match(html, /今日重點（2026-08-02）/);
-  assert.match(html, /Order 原始通聯 XLSX 與 XML 格式支援/);
-  assert.match(html, /支援多檔案同批匯入/);
+  assert.match(html, /href="\.\/styles\.css\?v=20260812-multi-number-location-v1"/);
+  assert.match(html, /今日重點（2026-08-12）/);
+  assert.match(html, /新增「多門號位置」/);
+  assert.match(html, /同一縣市、行政區 30 分鐘內出現/);
   assert.match(html, /id="dateFilterPanel" class="sidebar-panel date-filter-panel" hidden/);
   assert.match(html, /id="dateFilterButton"[^>]+aria-controls="dateFilterModal"/);
   assert.match(html, /id="dateFilterModal"[^>]+role="dialog"[^>]+aria-modal="true"/);
@@ -430,6 +536,17 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   assert.match(appSource, /scope_label: `日期篩選/);
   assert.doesNotMatch(appSource, /phone-workbench-date-range/);
   assert.match(styles, /\.date-filter-card\s*\{/);
+  assert.match(html, /data-view="multiLocation"[^>]*>[\s\S]*?多門號位置<\/strong>/);
+  assert.match(html, /id="mainImportPanel" class="sidebar-panel"/);
+  assert.match(html, /id="multiLocationFileInput"[^>]+accept="\.xlsx,\.xml" multiple/);
+  assert.match(html, /id="multiLocationView" class="view"/);
+  assert.match(html, /id="multiLocationRows"/);
+  assert.match(appSource, /multiLocationWorkspace: null/);
+  assert.match(appSource, /MULTI_LOCATION_PAGE_SIZE = 500/);
+  assert.match(appSource, /computeMultiNumberLocationMatches/);
+  assert.match(appSource, /classifyTaiwanAdministrativeArea/);
+  assert.doesNotMatch(appSource, /phone-workbench-multi-location/);
+  assert.match(styles, /\.multi-location-primary-button\s*\{/);
   assert.match(html, /id="hotspotCountyFilterButton" class="county-filter-button"/);
   assert.match(html, /id="hotspotCountyFilterModal"[^>]+role="dialog"[^>]+aria-modal="true"/);
   assert.match(html, /id="hotspotCountySelectAllButton"[^>]*>全選<\/button>/);
@@ -457,14 +574,14 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   for (const relativePath of ["vendor/xlsx.full.min.js", "attachment-export.js", "app.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
-    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=20260802-fet-order-date-filter-v1"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=20260812-multi-number-location-v1"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
     assert.ok(html.includes(`'${sri}'`));
   }
   for (const relativePath of ["vendor/exceljs.min.js", "vendor/pdf-lib.min.js", "vendor/fontkit.umd.min.js", "vendor/open-huninn-data.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
     assert.ok(html.includes(`'${sri}'`));
-    assert.ok(appSource.includes(`./${relativePath}?v=20260802-fet-order-date-filter-v1`));
+    assert.ok(appSource.includes(`./${relativePath}?v=20260812-multi-number-location-v1`));
     assert.ok(appSource.includes(sri));
   }
   assert.match(html, /connect-src 'none'/);

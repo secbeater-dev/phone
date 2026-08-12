@@ -168,7 +168,7 @@ body[data-theme="dark"] .sidebar { background: rgba(23, 23, 23, 0.96); }
   border-color: var(--accent);
   outline: none;
 }
-.date-filter-panel[hidden] { display: none; }
+.sidebar-panel[hidden] { display: none; }
 .date-filter-trigger {
   display: flex;
   width: 100%;
@@ -311,6 +311,67 @@ body[data-theme="dark"] .panel { background: rgba(23, 23, 23, 0.98); }
   font-size: 13px;
 }
 body[data-theme="dark"] .import-result-item { background: #202020; }
+
+.multi-location-import-panel,
+.multi-location-list-panel {
+  border-color: var(--ink);
+  box-shadow: none;
+}
+.multi-location-primary-button {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--panel);
+  font-weight: 800;
+}
+.multi-location-primary-button:hover,
+.multi-location-primary-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ink) 24%, transparent);
+  outline-offset: 2px;
+}
+.multi-location-summary {
+  padding: 7px 10px;
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.multi-location-table-wrap { resize: vertical; }
+.multi-location-table { min-width: 1080px; }
+.multi-location-table th,
+.multi-location-table td { text-align: left; }
+.multi-location-table th:nth-child(1) { width: 230px; }
+.multi-location-table th:nth-child(2) { width: 110px; }
+.multi-location-table th:nth-child(3) { width: 120px; }
+.multi-location-table th:nth-child(4) { width: 190px; }
+.multi-location-phone-list,
+.multi-location-note-list {
+  display: grid;
+  gap: 7px;
+}
+.multi-location-phone-list .phone-value {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+}
+.multi-location-note-list label {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.45fr) minmax(150px, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+.multi-location-note-list label > span {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .metric-row, .detail-stats-grid, .analysis-grid {
   display: grid;
@@ -1042,4 +1103,6 @@ body[data-theme="dark"] .hotspot-times { background: #111111; }
   .attachment-export-heading { display: grid; }
   .attachment-pdf-grid { grid-template-columns: 1fr; }
   .call-pagination { align-items: flex-start; flex-direction: column; }
+  .multi-location-summary { white-space: normal; }
+  .multi-location-note-list label { grid-template-columns: 1fr; }
 }

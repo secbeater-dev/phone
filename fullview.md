@@ -6,7 +6,7 @@
 
 Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具。使用者選取的 XLSX/XML 由瀏覽器內的 `FileReader`、本地 SheetJS 與 `app.js` 處理；附卷由本地 ExcelJS/pdf-lib 產生；沒有後端、API、資料庫、Service Worker 或上傳端點。
 
-功能包括同批多檔合併、通聯列表、用戶資料、電話統計、時間分布、基地台熱點、電話投單，以及附卷 XLSX/PDF、workspace、CSV 與本機設定匯出。
+功能包括同批多檔合併、通聯列表、用戶資料、電話統計、時間分布、基地台熱點、多門號位置、電話投單，以及附卷 XLSX/PDF、workspace、CSV 與本機設定匯出。
 
 ## 2. 目錄與責任
 
@@ -40,7 +40,7 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 
 ## 3. 載入順序
 
-1. `index.html` 建立側欄、六個 view、匯入控制、全域日期篩選視窗、熱點縣市篩選視窗、附卷匯出視窗與使用提醒；提醒中的「今日重點」列出目前發布的使用者可見更新，Gemini 區塊使用原生 `details` 顯示家庭分享教學。
+1. `index.html` 建立側欄、七個 view、一般與多門號位置匯入控制、全域日期篩選視窗、熱點縣市篩選視窗、附卷匯出視窗與使用提醒；提醒中的「今日重點」列出目前發布的使用者可見更新，Gemini 區塊使用原生 `details` 顯示家庭分享教學。
 2. 瀏覽器透過固定發布版本查詢字串載入 `styles.css`、`vendor/xlsx.full.min.js`、`attachment-export.js` 與 `app.js`；三個 script 驗證 SHA-384 SRI 後依序執行。版本字串避免舊快取與新版資產衝突，CSP 不允許其他 script。
 3. `app.js` 與 `attachment-export.js` 均以 UMD 包裝，可供瀏覽器及 Node 測試使用。只有使用者按下附卷下載時，`app.js` 才以固定版本路徑與 SRI 延遲載入 ExcelJS，或依序載入 pdf-lib、fontkit 與字型資料。
 4. `DOMContentLoaded` 執行 `init()`，還原偏好、綁定事件並渲染所有 view。
@@ -56,6 +56,7 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 - `hourSelection`、`appliedHourSelection`、`expandedHotspotAddress`：時段與展開中熱點狀態。
 - `hotspotCountySelection`、`hotspotCountyDraft`：目前套用及彈窗草稿的縣市條件；預設包含現行 22 縣市及「未辨識」，只存在記憶體且新 workspace 匯入時重設。
 - `dateRangeBounds`、`dateRange`、`dateRangeDraft`：全部可解析通聯的日期界線、目前套用日期及彈窗草稿；只存在記憶體，新 workspace 成功匯入時重設為完整資料。
+- `multiLocationWorkspace`、`multiLocationMatches`、`multiLocationExcluded`、`multiLocationPage`：多門號位置專用的獨立合併 workspace、符合事件、排除計數與 500 筆分頁；只存在記憶體，不取代一般 workspace，也不讀取一般全域日期範圍。
 - `theme`、`sidebarCollapsed`：介面偏好。
 
 ## 5. 匯入與格式判定
@@ -71,6 +72,8 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 ```
 
 同一次選取的所有成功檔案合併成一個 workspace；部分失敗仍保留成功項目並顯示失敗狀態，全部失敗則不改變現有資料。下一批只要至少一檔成功，就以該批合併結果取代目前 workspace。合併時重算摘要、電話統計、時間分布及基地台；同名 `subject` 欄位的不同非空值去重後以 `、` 合併。
+
+「多門號位置」的專用 file input 也沿用 `parseImportFile` 與 `mergeWorkspaces`，但成功結果只寫入 `multiLocationWorkspace`。部分失敗時仍比對成功檔案；全部失敗保留上一批專用資料。一般 `currentWorkspace`、日期範圍、附卷、workspace JSON 與電話投單均不受影響；切換到此 view 時暫時隱藏側欄的一般匯入與時間篩選，離開即恢復。
 
 XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版標題；只有這個格式會先移除標題內空白後再比對。識別欄位為 `CDR類別`、`主叫號碼`、`查詢狀態`、`受叫號碼`、`始話日期時間`、`通話秒數`、`IMEI`、`指定轉接`、`起始基地台-地址/終止基地台-地址`。命中後回傳：
 
@@ -144,11 +147,25 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 
 基地台以 `station_key` 去重，保存 `cell_id`、原始/正規化地址、狀態與虛擬標記；記錄透過帶角色的 `base_refs` 參照。
 
+### 多門號位置比對
+
+`classifyTaiwanAdministrativeArea` 先移除空白、將「台」正規化為「臺」，再依內政部國土測繪中心現行 22 縣市與 368 個鄉鎮市區對照，只有地址中縣市後方緊接正式行政區名稱才回傳 `{ county, district }`。未辨識地址、虛擬基地台與空白地址不參與比對。
+
+`computeMultiNumberLocationMatches` 只採 `target_phone` 作為調閱門號。每筆 record 的所有 `base_refs` 均使用 `occurred_at`；同筆 record 在同一縣市/行政區去重。缺少門號、合法時間或可辨識地址者只累計分類排除數，不保留來源內容。每一縣市/行政區內按時間排序，以每個事件為起點建立包含端點的 30 分鐘向前滑動視窗；至少兩個不同正規化門號才成立。相同終點的後續子集合省略，因此保留的每筆結果都是不超過 30 分鐘的最大事件窗：
+
+```js
+{
+  matches: [{ start_at, end_at, county, district, phones, occurrence_count }],
+  excluded: { missing_phone, invalid_time, invalid_address }
+}
+```
+
 ## 7. 畫面與本機輸出
 
 - `renderTwoWayCalls`：顯示來源檔案、通聯搜尋、全資料排序、欄寬、備註與每頁 500 筆分頁；先套用全域日期，再對結果搜尋、排序，條件改變時回到第一頁，沒有靜默筆數截斷。
 - `renderProfileView`：subject 保留完整案件欄位，摘要與 IMEI 清單依全域日期重新計算。
 - `renderStatsView`：依全域日期及明確/衍生方向統計來電、去電及完整排行；三種排行均顯示全部電話，不截斷前 20 名。
+- `renderMultiLocationView`：顯示獨立批次的時間範圍、縣市、行政區、不同調閱門號及共用備註，每頁 500 筆；沒有符合事件時顯示正常空狀態。門號備註可直接編輯，沿用 `data-phone-note` 與相同 localStorage key，因此會同步通聯列表及電話統計。
 - `renderHoursView`：全域日期先套用，再與 24 小時選擇、地址搜尋及縣市條件取交集。熱點搜尋右側的綠色齒輪開啟縣市篩選；使用者可在現行 22 縣市及「未辨識」間多選，並以「全選」或「全部取消」快速調整草稿。按套用後才過濾熱點列表；取消、背景點擊或 Escape 會放棄草稿。全部取消時套用維持停用，至少重新選一項後才能套用。
 - `renderSubmissionPreview`：電話驗證、去重、投單預覽與 CSV。
 - `renderExportView`：workspace JSON 與本機設定匯出；入口位於側欄下方工具區，切換後顯示選取狀態。
@@ -170,7 +187,7 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 
 ## 8. localStorage
 
-同源 `localStorage` 保存排行模式、24 小時選取、電話備註、通聯欄寬、主題與側欄狀態。全域日期、完整 workspace 與通聯記錄不會自動保存；只有使用者主動匯出才會產生本機下載檔。
+同源 `localStorage` 保存排行模式、24 小時選取、電話備註、通聯欄寬、主題與側欄狀態。全域日期、一般 workspace、多門號位置 workspace/結果與通聯記錄不會自動保存；只有使用者主動匯出才會產生本機下載檔。
 
 ## 9. 隱私與信任邊界
 
@@ -186,9 +203,9 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 
 ## 10. 測試
 
-`node --test tests/app.test.js` 使用記憶體內合成 XLSX/XML，涵蓋：中華電信空白標題、用戶資料、主叫/受叫/進來 CDR、調閱門號不在該列、無效日期、IMEI、指定轉接與雙基地台；遠傳地檢新版另涵蓋九欄、空白佔位欄、重複查詢區段、內嵌/相鄰案件資料、缺少通話對象、轉接、備註、基地台續行與重複續行；遠傳 Order 涵蓋雙工作表/英文單工作表、raw Excel serial、數值 IMEI、UTF-8/Big5 宣告 XML、毫秒日期、方向代碼、轉接及起訖基地台。另測試多檔合併、來源追蹤、subject 去重、舊 workspace 相容、既有台灣大哥大解析、日期界線/單日/錯置/無效日期、電話方向、完整排行、22 縣市與台/臺分類、未辨識、零資料、逐通聯地址去重、縣市比例、縣市全選/全部取消控制、日期範圍附卷 metadata、六張 XLSX 工作表、文字/公式安全、六種 PDF、彈窗文字、指定連結、HTML 無 Google/Tellows，以及靜態/延遲載入資產的 SRI 與檔案雜湊一致。
+`node --test tests/app.test.js` 使用記憶體內合成 XLSX/XML，涵蓋：中華電信空白標題、用戶資料、主叫/受叫/進來 CDR、調閱門號不在該列、無效日期、IMEI、指定轉接與雙基地台；遠傳地檢新版另涵蓋九欄、空白佔位欄、重複查詢區段、內嵌/相鄰案件資料、缺少通話對象、轉接、備註、基地台續行與重複續行；遠傳 Order 涵蓋雙工作表/英文單工作表、raw Excel serial、數值 IMEI、UTF-8/Big5 宣告 XML、毫秒日期、方向代碼、轉接及起訖基地台。另測試多檔合併、來源追蹤、subject 去重、舊 workspace 相容、既有台灣大哥大解析、日期界線/單日/錯置/無效日期、電話方向、完整排行、22 縣市與台/臺分類、未辨識、零資料、逐通聯地址去重、縣市比例、縣市全選/全部取消控制、多門號行政區分類、台/臺、跨縣市同名行政區、相同/不同門號、30 分鐘端點、超過 30 分鐘、重複基地台、無效時間、虛擬/未辨識地址與最大滑動視窗，並涵蓋日期範圍附卷 metadata、六張 XLSX 工作表、文字/公式安全、六種 PDF、彈窗文字、指定連結、HTML 無 Google/Tellows，以及靜態/延遲載入資產的 SRI 與檔案雜湊一致。
 
-設定 `PRIVATE_CDR_XLSX` 時會啟用 repository 外中華電信真實檔整合測試；設定 `PRIVATE_FET_XLSX` 時會啟用 repository 外遠傳地檢真實檔整合測試。遠傳 Order 的兩份 XLSX 與一份 XML 另由 repository 外的隔離驗證器逐檔檢查格式、有效來源列完整性、日期、方向、識別欄位、基地台、六分頁 XLSX 與六份 PDF；所有真實檔驗證只回報檔案類別及通過/失敗，不輸出檔名、內容、筆數或留下產物。合成 XLSX 另以試算表工具檢查/渲染六張工作表；六份合成 PDF 以 Poppler 渲染及抽取文字，確認換頁、表頭、中文文字與可搜尋性。瀏覽器煙霧測試只使用合成資料，檢查六個 view、日期彈窗、分頁、附卷視窗、下載與零非預期第三方請求。
+設定 `PRIVATE_CDR_XLSX` 時會啟用 repository 外中華電信真實檔整合測試；設定 `PRIVATE_FET_XLSX` 時會啟用 repository 外遠傳地檢真實檔整合測試。遠傳 Order 與多門號位置的真實來源另由 repository 外的隔離驗證器逐檔檢查解析及分析流程；所有真實檔驗證只回報檔案序號及通過/失敗，不輸出檔名、內容、筆數或留下產物。合成 XLSX 另以試算表工具檢查/渲染六張工作表；六份合成 PDF 以 Poppler 渲染及抽取文字，確認換頁、表頭、中文文字與可搜尋性。瀏覽器煙霧測試只使用合成資料，檢查七個 view、日期彈窗、兩種分頁、多門號備註、附卷視窗、下載與零非預期第三方請求。
 
 ## 11. GitHub Pages 部署
 
@@ -204,7 +221,7 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 
 ## 12. Node 匯出介面
 
-`app.js` 輸出：`parseImportFile`、`mergeWorkspaces`、`normalizeWorkspace`、`buildAttachmentReport`、`computePhoneStats`、`computeHourBuckets`、`computeAddressHotspots`、`classifyTaiwanCounty`、`computeTaiwanCountyStats`、`computeDateRangeBounds`、`filterRecordsByDateRange`、`buildSubmissionCsv`、`collectSubmissionPhones`、`collectUniqueImeis`、`normalizePhoneText`、`tellowsUrl`（僅相容舊程式碼，畫面不使用）、`hourButtonLabel`。`attachment-export.js` 輸出六張工作表/六種 PDF 定義、`createAttachmentXlsx`、`createAttachmentPdf` 與 `safeText`。
+`app.js` 輸出：`parseImportFile`、`mergeWorkspaces`、`normalizeWorkspace`、`buildAttachmentReport`、`computePhoneStats`、`computeHourBuckets`、`computeAddressHotspots`、`classifyTaiwanCounty`、`classifyTaiwanAdministrativeArea`、`computeTaiwanCountyStats`、`computeMultiNumberLocationMatches`、`computeDateRangeBounds`、`filterRecordsByDateRange`、`buildSubmissionCsv`、`collectSubmissionPhones`、`collectUniqueImeis`、`normalizePhoneText`、`tellowsUrl`（僅相容舊程式碼，畫面不使用）、`hourButtonLabel`。`attachment-export.js` 輸出六張工作表/六種 PDF 定義、`createAttachmentXlsx`、`createAttachmentPdf` 與 `safeText`。
 
 ## 13. 維護檢查表
 
@@ -229,3 +246,4 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 - 2026-07-29：為 `styles.css` 加入固定發布版本查詢字串，避免正式站沿用舊版響應式樣式快取。
 - 2026-08-02：新增遠傳 Order 英文原始 XLSX 與 Order XML parser，支援 raw Excel 值、UTF-8/Big5/UTF-16 XML 解碼、官方方向/類型語意、毫秒日期與起訖基地台；未知 XML 不再誤判為台哥大格式。
 - 2026-08-02：資料匯入下方新增記憶體內全域日期篩選；分析畫面與附卷依包含首末整日的範圍重算，workspace JSON 與電話投單維持完整原始資料。
+- 2026-08-12：新增獨立記憶體批次的「多門號位置」view，依現行縣市/行政區及包含端點的 30 分鐘滑動視窗比對不同調閱門號，並同步既有瀏覽器電話備註；一般 workspace、時間篩選與匯出流程維持不變。
