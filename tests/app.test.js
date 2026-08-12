@@ -409,16 +409,16 @@ function multiLocationWorkspace(records, stations) {
       summary: {},
     },
     records: records.map((record, index) => ({
-      row_number: index + 1,
-      source_file: "synthetic-location.xml",
-      source_sheet: "XML",
+      row_number: record.row_number ?? index + 1,
+      source_file: record.source_file || "synthetic-location.xml",
+      source_sheet: record.source_sheet || "XML",
       occurred_at: record.occurred_at,
       ended_at: "",
       duration_seconds: 0,
       call_type: "合成",
       direction: "other",
       target_phone: record.target_phone,
-      counterparty_phone: "",
+      counterparty_phone: record.counterparty_phone || "",
       imei: "",
       imsi: "",
       external_ip: "",
@@ -445,12 +445,12 @@ test("classifies current Taiwan county and administrative district pairs", () =>
 
 test("matches different target phones in the same district within an inclusive 30-minute window", () => {
   const stations = [
-    { station_key: "taipei-a", address: "台北市大安區合成路1號", normalized_address: "台北市大安區合成路1號", is_virtual: false },
-    { station_key: "taipei-b", address: "臺北市大安區合成路2號", normalized_address: "臺北市大安區合成路2號", is_virtual: false },
+    { station_key: "taipei-a", cell_id: "SYNTH-A", address: "台北市大安區合成路1號", normalized_address: "台北市大安區合成路1號", is_virtual: false },
+    { station_key: "taipei-b", cell_id: "SYNTH-B", address: "臺北市大安區合成路2號", normalized_address: "臺北市大安區合成路2號", is_virtual: false },
   ];
   const workspace = multiLocationWorkspace([
-    { occurred_at: "2026-08-12T10:00:00", target_phone: "0900000001", base_refs: [{ station_key: "taipei-a" }, { station_key: "taipei-a" }] },
-    { occurred_at: "2026-08-12T10:30:00", target_phone: "0900000002", base_refs: [{ station_key: "taipei-b" }] },
+    { row_number: 11, source_file: "synthetic-a.xml", source_sheet: "CDRInfo", occurred_at: "2026-08-12T10:00:00", target_phone: "0900000001", counterparty_phone: "0900000091", base_refs: [{ role: "start", station_key: "taipei-a" }, { role: "end", station_key: "taipei-b" }, { role: "start", station_key: "taipei-a" }] },
+    { row_number: 22, source_file: "synthetic-b.xlsx", source_sheet: "原始資料", occurred_at: "2026-08-12T10:30:00", target_phone: "0900000002", counterparty_phone: "0900000092", base_refs: [{ role: "primary", station_key: "taipei-b" }] },
   ], stations);
   const analysis = PhoneWorkbench.computeMultiNumberLocationMatches(workspace, { windowMinutes: 30 });
 
@@ -461,6 +461,26 @@ test("matches different target phones in the same district within an inclusive 3
   assert.equal(analysis.matches[0].occurrence_count, 2);
   assert.equal(analysis.matches[0].start_at, "2026-08-12T10:00:00");
   assert.equal(analysis.matches[0].end_at, "2026-08-12T10:30:00");
+  assert.equal(analysis.matches[0].id, "multi-location-match-1");
+  assert.equal(analysis.matches[0].source_records.length, 2);
+  assert.deepEqual(Object.keys(analysis.matches[0].source_records[0]).sort(), [
+    "counterparty_phone", "matched_stations", "occurred_at", "row_number", "source_file", "source_sheet", "target_phone",
+  ]);
+  assert.deepEqual(analysis.matches[0].source_records[0], {
+    source_file: "synthetic-a.xml",
+    source_sheet: "CDRInfo",
+    row_number: 11,
+    occurred_at: "2026-08-12T10:00:00",
+    target_phone: "0900000001",
+    counterparty_phone: "0900000091",
+    matched_stations: [
+      { role: "start", cell_id: "SYNTH-A", address: "台北市大安區合成路1號" },
+      { role: "end", cell_id: "SYNTH-B", address: "臺北市大安區合成路2號" },
+    ],
+  });
+  assert.deepEqual(analysis.matches[0].source_records[1].matched_stations, [
+    { role: "primary", cell_id: "SYNTH-B", address: "臺北市大安區合成路2號" },
+  ]);
 });
 
 test("does not match identical phones, different counties, or times beyond 30 minutes", () => {
@@ -521,7 +541,7 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
   assert.doesNotMatch(html, /googletagmanager|gtag\s*\(/i);
   assert.doesNotMatch(html, /tellows\.tw/i);
-  assert.match(html, /href="\.\/styles\.css\?v=20260812-multi-number-location-v1"/);
+  assert.match(html, /href="\.\/styles\.css\?v=20260812-multi-number-source-detail-v1"/);
   assert.match(html, /今日重點（2026-08-12）/);
   assert.match(html, /新增「多門號位置」/);
   assert.match(html, /同一縣市、行政區 30 分鐘內出現/);
@@ -541,12 +561,18 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   assert.match(html, /id="multiLocationFileInput"[^>]+accept="\.xlsx,\.xml" multiple/);
   assert.match(html, /id="multiLocationView" class="view"/);
   assert.match(html, /id="multiLocationRows"/);
+  assert.match(html, /<th>原始資料<\/th>/);
   assert.match(appSource, /multiLocationWorkspace: null/);
+  assert.match(appSource, /multiLocationExpandedMatches: new Set\(\)/);
+  assert.match(appSource, /data-multi-location-detail/);
+  assert.match(appSource, /source_records: windowEvents\.map/);
   assert.match(appSource, /MULTI_LOCATION_PAGE_SIZE = 500/);
   assert.match(appSource, /computeMultiNumberLocationMatches/);
   assert.match(appSource, /classifyTaiwanAdministrativeArea/);
   assert.doesNotMatch(appSource, /phone-workbench-multi-location/);
   assert.match(styles, /\.multi-location-primary-button\s*\{/);
+  assert.match(styles, /\.multi-location-detail-toggle\s*\{/);
+  assert.match(styles, /\.multi-location-source-table\s*\{/);
   assert.match(html, /id="hotspotCountyFilterButton" class="county-filter-button"/);
   assert.match(html, /id="hotspotCountyFilterModal"[^>]+role="dialog"[^>]+aria-modal="true"/);
   assert.match(html, /id="hotspotCountySelectAllButton"[^>]*>全選<\/button>/);
@@ -574,14 +600,14 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   for (const relativePath of ["vendor/xlsx.full.min.js", "attachment-export.js", "app.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
-    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=20260812-multi-number-location-v1"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=20260812-multi-number-source-detail-v1"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
     assert.ok(html.includes(`'${sri}'`));
   }
   for (const relativePath of ["vendor/exceljs.min.js", "vendor/pdf-lib.min.js", "vendor/fontkit.umd.min.js", "vendor/open-huninn-data.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
     assert.ok(html.includes(`'${sri}'`));
-    assert.ok(appSource.includes(`./${relativePath}?v=20260812-multi-number-location-v1`));
+    assert.ok(appSource.includes(`./${relativePath}?v=20260812-multi-number-source-detail-v1`));
     assert.ok(appSource.includes(sri));
   }
   assert.match(html, /connect-src 'none'/);

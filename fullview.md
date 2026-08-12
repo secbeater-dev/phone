@@ -56,7 +56,7 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 - `hourSelection`、`appliedHourSelection`、`expandedHotspotAddress`：時段與展開中熱點狀態。
 - `hotspotCountySelection`、`hotspotCountyDraft`：目前套用及彈窗草稿的縣市條件；預設包含現行 22 縣市及「未辨識」，只存在記憶體且新 workspace 匯入時重設。
 - `dateRangeBounds`、`dateRange`、`dateRangeDraft`：全部可解析通聯的日期界線、目前套用日期及彈窗草稿；只存在記憶體，新 workspace 成功匯入時重設為完整資料。
-- `multiLocationWorkspace`、`multiLocationMatches`、`multiLocationExcluded`、`multiLocationPage`：多門號位置專用的獨立合併 workspace、符合事件、排除計數與 500 筆分頁；只存在記憶體，不取代一般 workspace，也不讀取一般全域日期範圍。
+- `multiLocationWorkspace`、`multiLocationMatches`、`multiLocationExcluded`、`multiLocationPage`、`multiLocationExpandedMatches`：多門號位置專用的獨立合併 workspace、符合事件、排除計數、500 筆分頁與目前展開的原始資料識別碼；只存在記憶體，不取代一般 workspace，也不讀取一般全域日期範圍。新批次成功匯入時展開集合清空。
 - `theme`、`sidebarCollapsed`：介面偏好。
 
 ## 5. 匯入與格式判定
@@ -151,11 +151,18 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 
 `classifyTaiwanAdministrativeArea` 先移除空白、將「台」正規化為「臺」，再依內政部國土測繪中心現行 22 縣市與 368 個鄉鎮市區對照，只有地址中縣市後方緊接正式行政區名稱才回傳 `{ county, district }`。未辨識地址、虛擬基地台與空白地址不參與比對。
 
-`computeMultiNumberLocationMatches` 只採 `target_phone` 作為調閱門號。每筆 record 的所有 `base_refs` 均使用 `occurred_at`；同筆 record 在同一縣市/行政區去重。缺少門號、合法時間或可辨識地址者只累計分類排除數，不保留來源內容。每一縣市/行政區內按時間排序，以每個事件為起點建立包含端點的 30 分鐘向前滑動視窗；至少兩個不同正規化門號才成立。相同終點的後續子集合省略，因此保留的每筆結果都是不超過 30 分鐘的最大事件窗：
+`computeMultiNumberLocationMatches` 只採 `target_phone` 作為調閱門號。每筆 record 的所有 `base_refs` 均使用 `occurred_at`；同筆 record 在同一縣市/行政區只建立一個位置事件，相同行政區內多個不重複基地台則合併到該事件。缺少門號、合法時間或可辨識地址者只累計分類排除數，不保留來源內容。每一縣市/行政區內按時間排序，以每個事件為起點建立包含端點的 30 分鐘向前滑動視窗；至少兩個不同正規化門號才成立。相同終點的後續子集合省略，因此保留的每筆結果都是不超過 30 分鐘的最大事件窗。每筆結果取得不含個資的序號式 `id`，並以 `source_records` 保存該視窗實際採用的核心標準化欄位；不保存完整 XLSX 儲存格或 XML 節點：
 
 ```js
 {
-  matches: [{ start_at, end_at, county, district, phones, occurrence_count }],
+  matches: [{
+    id, start_at, end_at, county, district, phones, occurrence_count,
+    source_records: [{
+      source_file, source_sheet, row_number, occurred_at,
+      target_phone, counterparty_phone,
+      matched_stations: [{ role, cell_id, address }]
+    }]
+  }],
   excluded: { missing_phone, invalid_time, invalid_address }
 }
 ```
@@ -165,7 +172,7 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 - `renderTwoWayCalls`：顯示來源檔案、通聯搜尋、全資料排序、欄寬、備註與每頁 500 筆分頁；先套用全域日期，再對結果搜尋、排序，條件改變時回到第一頁，沒有靜默筆數截斷。
 - `renderProfileView`：subject 保留完整案件欄位，摘要與 IMEI 清單依全域日期重新計算。
 - `renderStatsView`：依全域日期及明確/衍生方向統計來電、去電及完整排行；三種排行均顯示全部電話，不截斷前 20 名。
-- `renderMultiLocationView`：顯示獨立批次的時間範圍、縣市、行政區、不同調閱門號及共用備註，每頁 500 筆；沒有符合事件時顯示正常空狀態。門號備註可直接編輯，沿用 `data-phone-note` 與相同 localStorage key，因此會同步通聯列表及電話統計。
+- `renderMultiLocationView`：顯示獨立批次的時間範圍、縣市、行政區、不同調閱門號及共用備註，每頁 500 筆；沒有符合事件時顯示正常空狀態。每筆摘要預設收合，原始資料按鈕以 `aria-expanded`/`aria-controls` 控制緊接摘要的跨欄明細列；明細一筆來源通聯一列，顯示來源檔/工作表/列號、時間、雙方號碼及本次行政區匹配的基地台角色、代碼、原始地址，且不計入摘要分頁筆數。門號備註可直接編輯，沿用 `data-phone-note` 與相同 localStorage key，因此會同步通聯列表及電話統計。
 - `renderHoursView`：全域日期先套用，再與 24 小時選擇、地址搜尋及縣市條件取交集。熱點搜尋右側的綠色齒輪開啟縣市篩選；使用者可在現行 22 縣市及「未辨識」間多選，並以「全選」或「全部取消」快速調整草稿。按套用後才過濾熱點列表；取消、背景點擊或 Escape 會放棄草稿。全部取消時套用維持停用，至少重新選一項後才能套用。
 - `renderSubmissionPreview`：電話驗證、去重、投單預覽與 CSV。
 - `renderExportView`：workspace JSON 與本機設定匯出；入口位於側欄下方工具區，切換後顯示選取狀態。
@@ -187,7 +194,7 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 
 ## 8. localStorage
 
-同源 `localStorage` 保存排行模式、24 小時選取、電話備註、通聯欄寬、主題與側欄狀態。全域日期、一般 workspace、多門號位置 workspace/結果與通聯記錄不會自動保存；只有使用者主動匯出才會產生本機下載檔。
+同源 `localStorage` 保存排行模式、24 小時選取、電話備註、通聯欄寬、主題與側欄狀態。全域日期、一般 workspace、多門號位置 workspace/結果/展開狀態與通聯記錄不會自動保存；只有使用者主動匯出才會產生本機下載檔。
 
 ## 9. 隱私與信任邊界
 
@@ -199,11 +206,11 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 - `.gitignore`、CI 敏感副檔名檢查及部署白名單形成三層防護。
 - 完整支援格式清單與發布日誌只保存在 repository 上一層的本機 `supported-formats.md`、`update.md`；它們不屬於 Git 工作樹，也不會進入 Pages artifact。
 
-任何真實通聯檔、內容、衍生識別資訊、workspace、投單 CSV、設定匯出、含個資截圖或日誌，都不得加入 Git、Actions artifact、文件或任何外部服務。真實檔只能從 repository 外在本機記憶體中驗證，測試輸出限各驗證階段的通過/失敗，不輸出檔名、內容或筆數。
+任何真實通聯檔、內容、衍生識別資訊、workspace、投單 CSV、設定匯出、含個資截圖或日誌，都不得加入 Git、Actions artifact、文件或任何外部服務。多門號位置的 `source_records` 只存在瀏覽器記憶體與目前畫面，不加入一般 workspace schema 或任何匯出。真實檔只能從 repository 外在本機記憶體中驗證，測試輸出限各驗證階段的通過/失敗，不輸出檔名、內容或筆數。
 
 ## 10. 測試
 
-`node --test tests/app.test.js` 使用記憶體內合成 XLSX/XML，涵蓋：中華電信空白標題、用戶資料、主叫/受叫/進來 CDR、調閱門號不在該列、無效日期、IMEI、指定轉接與雙基地台；遠傳地檢新版另涵蓋九欄、空白佔位欄、重複查詢區段、內嵌/相鄰案件資料、缺少通話對象、轉接、備註、基地台續行與重複續行；遠傳 Order 涵蓋雙工作表/英文單工作表、raw Excel serial、數值 IMEI、UTF-8/Big5 宣告 XML、毫秒日期、方向代碼、轉接及起訖基地台。另測試多檔合併、來源追蹤、subject 去重、舊 workspace 相容、既有台灣大哥大解析、日期界線/單日/錯置/無效日期、電話方向、完整排行、22 縣市與台/臺分類、未辨識、零資料、逐通聯地址去重、縣市比例、縣市全選/全部取消控制、多門號行政區分類、台/臺、跨縣市同名行政區、相同/不同門號、30 分鐘端點、超過 30 分鐘、重複基地台、無效時間、虛擬/未辨識地址與最大滑動視窗，並涵蓋日期範圍附卷 metadata、六張 XLSX 工作表、文字/公式安全、六種 PDF、彈窗文字、指定連結、HTML 無 Google/Tellows，以及靜態/延遲載入資產的 SRI 與檔案雜湊一致。
+`node --test tests/app.test.js` 使用記憶體內合成 XLSX/XML，涵蓋：中華電信空白標題、用戶資料、主叫/受叫/進來 CDR、調閱門號不在該列、無效日期、IMEI、指定轉接與雙基地台；遠傳地檢新版另涵蓋九欄、空白佔位欄、重複查詢區段、內嵌/相鄰案件資料、缺少通話對象、轉接、備註、基地台續行與重複續行；遠傳 Order 涵蓋雙工作表/英文單工作表、raw Excel serial、數值 IMEI、UTF-8/Big5 宣告 XML、毫秒日期、方向代碼、轉接及起訖基地台。另測試多檔合併、來源追蹤、subject 去重、舊 workspace 相容、既有台灣大哥大解析、日期界線/單日/錯置/無效日期、電話方向、完整排行、22 縣市與台/臺分類、未辨識、零資料、逐通聯地址去重、縣市比例、縣市全選/全部取消控制、多門號行政區分類、台/臺、跨縣市同名行政區、相同/不同門號、30 分鐘端點、超過 30 分鐘、重複基地台、無效時間、虛擬/未辨識地址、最大滑動視窗、來源核心欄位、同區多基地台合併與穩定匹配識別碼，並涵蓋日期範圍附卷 metadata、六張 XLSX 工作表、文字/公式安全、六種 PDF、彈窗文字、指定連結、HTML 無 Google/Tellows，以及靜態/延遲載入資產的 SRI 與檔案雜湊一致。
 
 設定 `PRIVATE_CDR_XLSX` 時會啟用 repository 外中華電信真實檔整合測試；設定 `PRIVATE_FET_XLSX` 時會啟用 repository 外遠傳地檢真實檔整合測試。遠傳 Order 與多門號位置的真實來源另由 repository 外的隔離驗證器逐檔檢查解析及分析流程；所有真實檔驗證只回報檔案序號及通過/失敗，不輸出檔名、內容、筆數或留下產物。合成 XLSX 另以試算表工具檢查/渲染六張工作表；六份合成 PDF 以 Poppler 渲染及抽取文字，確認換頁、表頭、中文文字與可搜尋性。瀏覽器煙霧測試只使用合成資料，檢查七個 view、日期彈窗、兩種分頁、多門號備註、附卷視窗、下載與零非預期第三方請求。
 
@@ -247,3 +254,4 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 - 2026-08-02：新增遠傳 Order 英文原始 XLSX 與 Order XML parser，支援 raw Excel 值、UTF-8/Big5/UTF-16 XML 解碼、官方方向/類型語意、毫秒日期與起訖基地台；未知 XML 不再誤判為台哥大格式。
 - 2026-08-02：資料匯入下方新增記憶體內全域日期篩選；分析畫面與附卷依包含首末整日的範圍重算，workspace JSON 與電話投單維持完整原始資料。
 - 2026-08-12：新增獨立記憶體批次的「多門號位置」view，依現行縣市/行政區及包含端點的 30 分鐘滑動視窗比對不同調閱門號，並同步既有瀏覽器電話備註；一般 workspace、時間篩選與匯出流程維持不變。
+- 2026-08-12：多門號位置的每筆匹配新增預設收合的原始資料明細列，顯示來源位置、時間、雙方號碼與本次匹配基地台；同筆同區基地台合併，完整來源列不寫入標準 schema 或匯出。

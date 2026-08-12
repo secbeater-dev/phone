@@ -4,10 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT' 'sha384-M0ruih3I+EYxxDzsj6KERi+BoH6pvIVrbuBzQlxXlNtZaI/PGY6yGgcpl9ojYNAv' 'sha384-XrTrEgpd02e87CkH+uKzaxiE6GKa21KDR8QmnlXi99vnEmP8JhVkaCbQkf64b16X' 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' 'sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn' 'sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'; media-src 'none'; manifest-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT' 'sha384-M0ruih3I+EYxxDzsj6KERi+BoH6pvIVrbuBzQlxXlNtZaI/PGY6yGgcpl9ojYNAv' 'sha384-QpLOsd46v2jdj/AZVMwDBoeka7jDDi8GvDu8gELxJ/H2BtvWKNANNRcpVpI535nB' 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' 'sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn' 'sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'; media-src 'none'; manifest-src 'none'" />
     <title>通聯資料分析工具</title>
     <link rel="icon" type="image/png" href="./assets/Beater_icon.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260812-multi-number-location-v1" />
+    <link rel="stylesheet" href="./styles.css?v=20260812-multi-number-source-detail-v1" />
   </head>
   <body>
     <div class="app-shell">
@@ -181,16 +181,16 @@
             <div class="section-title">
               <div>
                 <h2>列表</h2>
-                <p class="muted">列出不同調閱門號在同一縣市、行政區內 30 分鐘內出現的事件。</p>
+                <p class="muted">列出不同調閱門號在同一縣市、行政區內 30 分鐘內出現的事件，並可展開核心原始資料。</p>
               </div>
               <span id="multiLocationSummary" class="multi-location-summary">共 0 筆</span>
             </div>
             <div class="table-wrap multi-location-table-wrap">
               <table class="multi-location-table">
                 <thead>
-                  <tr><th>時間範圍</th><th>縣市</th><th>行政區</th><th>出現門號</th><th>門號備註（只存瀏覽器）</th></tr>
+                  <tr><th>時間範圍</th><th>縣市</th><th>行政區</th><th>出現門號</th><th>門號備註（只存瀏覽器）</th><th>原始資料</th></tr>
                 </thead>
-                <tbody id="multiLocationRows"><tr><td colspan="5" class="muted">尚未匯入資料。</td></tr></tbody>
+                <tbody id="multiLocationRows"><tr><td colspan="6" class="muted">尚未匯入資料。</td></tr></tbody>
               </table>
             </div>
             <div class="call-pagination" aria-label="多門號位置列表分頁">
@@ -335,6 +335,7 @@
             <ul class="notice-list">
               <li>新增「多門號位置」，可獨立匯入多份通聯檔進行位置比對。</li>
               <li>不同調閱門號在同一縣市、行政區 30 分鐘內出現時，會整理成事件列表。</li>
+              <li>每筆位置事件可展開來源位置、時間、雙方號碼及匹配基地台，方便核對原始資料。</li>
               <li>位置列表的門號備註與通聯列表、電話統計共用，修改後會立即同步。</li>
               <li>多門號位置資料只保留在瀏覽器記憶體，不會取代一般分析資料。</li>
             </ul>
@@ -369,8 +370,8 @@
         </aside>
       </div>
     </section>
-    <script src="./vendor/xlsx.full.min.js?v=20260812-multi-number-location-v1" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
-    <script src="./attachment-export.js?v=20260812-multi-number-location-v1" integrity="sha384-M0ruih3I+EYxxDzsj6KERi+BoH6pvIVrbuBzQlxXlNtZaI/PGY6yGgcpl9ojYNAv" crossorigin="anonymous"></script>
-    <script src="./app.js?v=20260812-multi-number-location-v1" integrity="sha384-XrTrEgpd02e87CkH+uKzaxiE6GKa21KDR8QmnlXi99vnEmP8JhVkaCbQkf64b16X" crossorigin="anonymous"></script>
+    <script src="./vendor/xlsx.full.min.js?v=20260812-multi-number-source-detail-v1" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
+    <script src="./attachment-export.js?v=20260812-multi-number-source-detail-v1" integrity="sha384-M0ruih3I+EYxxDzsj6KERi+BoH6pvIVrbuBzQlxXlNtZaI/PGY6yGgcpl9ojYNAv" crossorigin="anonymous"></script>
+    <script src="./app.js?v=20260812-multi-number-source-detail-v1" integrity="sha384-QpLOsd46v2jdj/AZVMwDBoeka7jDDi8GvDu8gELxJ/H2BtvWKNANNRcpVpI535nB" crossorigin="anonymous"></script>
   </body>
 </html>

@@ -21,10 +21,10 @@
   const MULTI_LOCATION_PAGE_SIZE = 500;
   const MULTI_LOCATION_WINDOW_MINUTES = 30;
   const ATTACHMENT_ASSETS = {
-    exceljs: { src: "./vendor/exceljs.min.js?v=20260812-multi-number-location-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
-    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260812-multi-number-location-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
-    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260812-multi-number-location-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
-    fontData: { src: "./vendor/open-huninn-data.js?v=20260812-multi-number-location-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
+    exceljs: { src: "./vendor/exceljs.min.js?v=20260812-multi-number-source-detail-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
+    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260812-multi-number-source-detail-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
+    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260812-multi-number-source-detail-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
+    fontData: { src: "./vendor/open-huninn-data.js?v=20260812-multi-number-source-detail-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
   };
   const loadedAttachmentAssets = new Map();
   const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}-${String(hour + 1).padStart(2, "0")}`);
@@ -133,6 +133,7 @@
     multiLocationMatches: [],
     multiLocationExcluded: { missing_phone: 0, invalid_time: 0, invalid_address: 0 },
     multiLocationPage: 1,
+    multiLocationExpandedMatches: new Set(),
     phoneNotes: {},
     callColumnWidths: {},
     theme: "light",
@@ -175,6 +176,10 @@
     $("multiLocationRows")?.addEventListener("input", (event) => {
       const input = event.target.closest("[data-phone-note]");
       if (input) updatePhoneNote(input.dataset.phoneNote, input.value, input);
+    });
+    $("multiLocationRows")?.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-multi-location-detail]");
+      if (button) toggleMultiLocationDetail(button.dataset.multiLocationDetail);
     });
     $("dateFilterButton")?.addEventListener("click", showDateFilterModal);
     $("dateFilterCloseButton")?.addEventListener("click", hideDateFilterModal);
@@ -439,6 +444,7 @@
       state.multiLocationMatches = analysis.matches;
       state.multiLocationExcluded = analysis.excluded;
       state.multiLocationPage = 1;
+      state.multiLocationExpandedMatches = new Set();
       renderMultiLocationView();
       $("multiLocationImportStatus").textContent = failures
         ? "部分檔案匯入完成；失敗項目請見下方。"
@@ -932,17 +938,11 @@
       ? `符合 ${matches.length.toLocaleString()} 筆｜排除 ${excluded.toLocaleString()} 項無法比對資料`
       : `符合 ${matches.length.toLocaleString()} 筆`;
     if (!state.multiLocationWorkspace) {
-      rowsTarget.innerHTML = `<tr><td colspan="5" class="muted">尚未匯入資料。</td></tr>`;
+      rowsTarget.innerHTML = `<tr><td colspan="6" class="muted">尚未匯入資料。</td></tr>`;
     } else if (!pageRows.length) {
-      rowsTarget.innerHTML = `<tr><td colspan="5" class="muted">目前沒有不同門號在同一行政區 30 分鐘內出現的結果。</td></tr>`;
+      rowsTarget.innerHTML = `<tr><td colspan="6" class="muted">目前沒有不同門號在同一行政區 30 分鐘內出現的結果。</td></tr>`;
     } else {
-      rowsTarget.innerHTML = pageRows.map((match) => `<tr>
-        <td>${escapeHtml(formatMultiLocationTimeRange(match.start_at, match.end_at))}</td>
-        <td>${escapeHtml(match.county)}</td>
-        <td>${escapeHtml(match.district)}</td>
-        <td><div class="multi-location-phone-list">${match.phones.map((phone) => `<span class="phone-value">${escapeHtml(phone)}</span>`).join("")}</div></td>
-        <td><div class="multi-location-note-list">${match.phones.map((phone) => `<label><span>${escapeHtml(phone)}</span><input class="phone-note-input" data-phone-note="${escapeHtml(phone)}" value="${escapeHtml(phoneNote(phone))}" aria-label="備註(只存瀏覽器) ${escapeHtml(phone)}" /></label>`).join("")}</div></td>
-      </tr>`).join("");
+      rowsTarget.innerHTML = pageRows.map(renderMultiLocationMatchRows).join("");
     }
     const pageSummary = $("multiLocationPageSummary");
     if (pageSummary) pageSummary.textContent = matches.length
@@ -955,6 +955,60 @@
   function changeMultiLocationPage(delta) {
     state.multiLocationPage += Number(delta || 0);
     renderMultiLocationView();
+  }
+
+  function toggleMultiLocationDetail(matchId) {
+    if (!matchId) return;
+    if (state.multiLocationExpandedMatches.has(matchId)) state.multiLocationExpandedMatches.delete(matchId);
+    else state.multiLocationExpandedMatches.add(matchId);
+    renderMultiLocationView();
+    $(`multiLocationDetailToggle-${matchId}`)?.focus();
+  }
+
+  function renderMultiLocationMatchRows(match) {
+    const matchId = cellText(match.id);
+    const sourceRecords = Array.isArray(match.source_records) ? match.source_records : [];
+    const expanded = state.multiLocationExpandedMatches.has(matchId);
+    const detailId = `multiLocationDetail-${matchId}`;
+    const toggleId = `multiLocationDetailToggle-${matchId}`;
+    const summaryRow = `<tr class="multi-location-match-row">
+      <td>${escapeHtml(formatMultiLocationTimeRange(match.start_at, match.end_at))}</td>
+      <td>${escapeHtml(match.county)}</td>
+      <td>${escapeHtml(match.district)}</td>
+      <td><div class="multi-location-phone-list">${match.phones.map((phone) => `<span class="phone-value">${escapeHtml(phone)}</span>`).join("")}</div></td>
+      <td><div class="multi-location-note-list">${match.phones.map((phone) => `<label><span>${escapeHtml(phone)}</span><input class="phone-note-input" data-phone-note="${escapeHtml(phone)}" value="${escapeHtml(phoneNote(phone))}" aria-label="備註(只存瀏覽器) ${escapeHtml(phone)}" /></label>`).join("")}</div></td>
+      <td><button id="${escapeHtml(toggleId)}" class="multi-location-detail-toggle" data-multi-location-detail="${escapeHtml(matchId)}" type="button" aria-expanded="${expanded ? "true" : "false"}" aria-controls="${escapeHtml(detailId)}">${expanded ? "收合" : `展開（${sourceRecords.length.toLocaleString()} 筆）`}</button></td>
+    </tr>`;
+    if (!expanded) return summaryRow;
+    return `${summaryRow}<tr id="${escapeHtml(detailId)}" class="multi-location-detail-row"><td colspan="6">${renderMultiLocationSourceRecords(sourceRecords)}</td></tr>`;
+  }
+
+  function renderMultiLocationSourceRecords(records) {
+    if (!records.length) return `<p class="muted">沒有可顯示的原始資料。</p>`;
+    return `<div class="multi-location-source-wrap">
+      <table class="multi-location-source-table">
+        <thead><tr><th>來源位置</th><th>發生時間</th><th>調閱門號</th><th>通話對象</th><th>基地台</th></tr></thead>
+        <tbody>${records.map((record) => `<tr>
+          <td>${renderMultiLocationSourcePosition(record)}</td>
+          <td>${escapeHtml(record.occurred_at || "")}</td>
+          <td><span class="phone-value">${escapeHtml(record.target_phone || "")}</span></td>
+          <td><span class="phone-value">${escapeHtml(record.counterparty_phone || "")}</span></td>
+          <td><div class="multi-location-source-stations">${(record.matched_stations || []).map((station) => `<span><strong>${escapeHtml(multiLocationStationRoleLabel(station.role))}</strong>${escapeHtml(station.cell_id || "無代碼")}｜${escapeHtml(station.address || "")}</span>`).join("")}</div></td>
+        </tr>`).join("")}</tbody>
+      </table>
+    </div>`;
+  }
+
+  function renderMultiLocationSourcePosition(record) {
+    const file = cellText(record.source_file) || "未標示來源檔案";
+    const sheet = cellText(record.source_sheet) || "未標示工作表";
+    const row = cellText(record.row_number);
+    return `<div class="multi-location-source-position"><strong>${escapeHtml(file)}</strong><span>${escapeHtml(sheet)}${row ? `｜第 ${escapeHtml(row)} 列` : ""}</span></div>`;
+  }
+
+  function multiLocationStationRoleLabel(role) {
+    const labels = { start: "起始：", end: "終止：", primary: "基地台：" };
+    return labels[cellText(role).toLowerCase()] || (cellText(role) ? `${cellText(role)}：` : "基地台：");
   }
 
   function formatMultiLocationTimeRange(start, end) {
@@ -3022,9 +3076,9 @@
         excluded.invalid_time += 1;
         return;
       }
-      const seenAreas = new Set();
       const refs = Array.isArray(record.base_refs) ? record.base_refs : [];
       if (!refs.length) excluded.invalid_address += 1;
+      const areaOccurrences = new Map();
       refs.forEach((ref) => {
         const station = stationMap.get(ref.station_key);
         if (!station || station.is_virtual) {
@@ -3037,15 +3091,40 @@
           return;
         }
         const areaKey = `${area.county}\u0000${area.district}`;
-        if (seenAreas.has(areaKey)) return;
-        seenAreas.add(areaKey);
+        const areaOccurrence = areaOccurrences.get(areaKey) || {
+          county: area.county,
+          district: area.district,
+          matched_stations: [],
+          matched_station_keys: new Set(),
+        };
+        const matchedStationKey = `${cellText(ref.role)}\u0000${station.station_key || stationKey(station)}`;
+        if (!areaOccurrence.matched_station_keys.has(matchedStationKey)) {
+          areaOccurrence.matched_station_keys.add(matchedStationKey);
+          areaOccurrence.matched_stations.push({
+            role: cellText(ref.role),
+            cell_id: cellText(station.cell_id),
+            address: cellText(station.address),
+          });
+        }
+        areaOccurrences.set(areaKey, areaOccurrence);
+      });
+      areaOccurrences.forEach((areaOccurrence, areaKey) => {
         const occurrence = {
           id: `location-${occurrenceSequence += 1}`,
           phone,
           occurred_at: occurredAt,
           time_ms: timeMs,
-          county: area.county,
-          district: area.district,
+          county: areaOccurrence.county,
+          district: areaOccurrence.district,
+          source_record: {
+            source_file: cellText(record.source_file),
+            source_sheet: cellText(record.source_sheet),
+            row_number: record.row_number ?? "",
+            occurred_at: occurredAt,
+            target_phone: phone,
+            counterparty_phone: normalizePhoneText(record.counterparty_phone),
+            matched_stations: areaOccurrence.matched_stations,
+          },
         };
         const rows = groups.get(areaKey) || [];
         rows.push(occurrence);
@@ -3074,12 +3153,16 @@
           district: windowEvents[0].district,
           phones,
           occurrence_count: windowEvents.length,
+          source_records: windowEvents.map((event) => event.source_record),
         });
       }
     });
     matches.sort((a, b) => String(a.start_at).localeCompare(String(b.start_at))
       || TAIWAN_COUNTIES.indexOf(a.county) - TAIWAN_COUNTIES.indexOf(b.county)
       || a.district.localeCompare(b.district, "zh-Hant", { numeric: true }));
+    matches.forEach((match, index) => {
+      match.id = `multi-location-match-${index + 1}`;
+    });
     return { matches, excluded };
   }
 
