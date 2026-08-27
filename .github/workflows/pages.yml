@@ -42,9 +42,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p _site
-          cp .nojekyll 404.html admin.html app.js attachment-export.js index.html styles.css _site/
+          cp .nojekyll 404.html admin.html app.js attachment-export.js import-parser.js index.html styles.css _site/
           mkdir -p _site/assets _site/vendor/licenses
-          cp assets/Beater_icon.png assets/ai-partner.webp _site/assets/
+          cp assets/Beater_icon.png assets/vehicle-id.jpg assets/shrimp-shell.jpg _site/assets/
           cp vendor/xlsx.full.min.js vendor/exceljs.min.js vendor/pdf-lib.min.js \
              vendor/fontkit.umd.min.js vendor/open-huninn-data.js _site/vendor/
           cp vendor/licenses/ExcelJS-LICENSE.txt \

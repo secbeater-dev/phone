@@ -17,14 +17,15 @@
     sidebarCollapsed: "phone-workbench-sidebar-collapsed",
   };
   const LOCAL_EXPORT_VERSION = "phone-workbench-local-settings-v1";
+  const RELEASE_ASSET_VERSION = "20260827-notice-ticket-import-v1";
   const CALL_PAGE_SIZE = 500;
   const MULTI_LOCATION_PAGE_SIZE = 500;
   const MULTI_LOCATION_WINDOW_MINUTES = 30;
   const ATTACHMENT_ASSETS = {
-    exceljs: { src: "./vendor/exceljs.min.js?v=20260812-multi-number-source-detail-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
-    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260812-multi-number-source-detail-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
-    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260812-multi-number-source-detail-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
-    fontData: { src: "./vendor/open-huninn-data.js?v=20260812-multi-number-source-detail-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
+    exceljs: { src: "./vendor/exceljs.min.js?v=20260827-notice-ticket-import-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
+    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260827-notice-ticket-import-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
+    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260827-notice-ticket-import-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
+    fontData: { src: "./vendor/open-huninn-data.js?v=20260827-notice-ticket-import-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
   };
   const loadedAttachmentAssets = new Map();
   const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}-${String(hour + 1).padStart(2, "0")}`);
@@ -139,6 +140,7 @@
     theme: "light",
     sidebarCollapsed: false,
     activeColumnResize: null,
+    ticketQueryKind: "subscriber_profile",
   };
 
   if (typeof document !== "undefined") {
@@ -150,9 +152,9 @@
     syncTheme();
     syncSidebarCollapsed();
     bindEvents();
-    setSubmissionDefaults();
+    applyTicketRangeDefaults();
     renderHourTiles();
-    renderAllViews();
+    renderActiveView();
     syncHotspotCountyFilterButton();
     syncDateFilterPanel();
     initCallColumnResize();
@@ -232,9 +234,12 @@
       renderHourTiles();
     });
     $("hourApplyButton")?.addEventListener("click", applyHourSelection);
-    $("submissionPreviewButton")?.addEventListener("click", renderSubmissionPreview);
-    $("submissionDownloadButton")?.addEventListener("click", downloadSubmissionCsv);
-    ["submissionPhonesInput", "submissionStartInput", "submissionEndInput"].forEach((id) => $(id)?.addEventListener("input", renderSubmissionPreview));
+    $("ticketClearButton")?.addEventListener("click", clearTicketSource);
+    $("ticketCopyButton")?.addEventListener("click", copyTicketCsv);
+    $("ticketDownloadButton")?.addEventListener("click", downloadTicketCsv);
+    $("ticketKindProfileButton")?.addEventListener("click", () => setTicketQueryKind("subscriber_profile"));
+    $("ticketKindLiveButton")?.addEventListener("click", () => setTicketQueryKind("live_location"));
+    ["ticketSourceInput", "ticketStartInput", "ticketEndInput"].forEach((id) => $(id)?.addEventListener("input", renderTicketLookupView));
     $("exportWorkspaceButton")?.addEventListener("click", exportWorkspaceJson);
     $("importWorkspaceInput")?.addEventListener("change", importWorkspaceJson);
     $("exportLocalSettingsButton")?.addEventListener("click", exportLocalSettings);
@@ -251,7 +256,7 @@
       if (event.target === $("attachmentExportModal")) hideAttachmentExportModal();
     });
     $("noticeDismissButton")?.addEventListener("click", hideUsageNotice);
-    $("oneClickUpdateButton")?.addEventListener("click", runOneClickUpdate);
+    $("hardReloadButton")?.addEventListener("click", runHardReload);
     $("usageNoticeModal")?.addEventListener("click", (event) => {
       if (event.target === $("usageNoticeModal")) hideUsageNotice();
     });
@@ -316,13 +321,7 @@
     if (modal) modal.hidden = true;
   }
 
-  function runOneClickUpdate() {
-    try {
-      localStorage.clear();
-      sessionStorage.clear();
-    } catch (_error) {
-      // Some privacy modes can block storage clearing; reload still helps fetch fresh assets.
-    }
+  function runHardReload() {
     const url = new URL(window.location.href);
     url.searchParams.set("refresh", String(Date.now()));
     window.location.replace(url.toString());
@@ -341,11 +340,7 @@
     });
     $("pageTitle").textContent = VIEW_TITLES[view];
     syncPrimarySidebarPanels();
-    if (view === "calls") renderTwoWayCalls();
-    if (view === "profile") renderProfileView();
-    if (view === "stats") renderStatsView();
-    if (view === "hours") renderHoursView();
-    if (view === "multiLocation") renderMultiLocationView();
+    renderActiveView();
   }
 
   function syncPrimarySidebarPanels() {
@@ -394,65 +389,155 @@
   async function handleFileImport(event) {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
-    $("importStatus").textContent = `匯入 ${files.length} 個檔案中...`;
-    $("importResults").innerHTML = "";
-    const workspaces = [];
-    let failures = 0;
-    for (const file of files) {
-      try {
-        const content = await readFileArrayBuffer(file);
-        const workspace = parseImportFile(file.name, content);
-        workspaces.push(workspace);
-        appendImportResult(workspace.case);
-      } catch (error) {
-        failures += 1;
-        appendImportError(file.name, error);
-      }
-    }
-    if (workspaces.length) {
-      applyWorkspace(mergeWorkspaces(workspaces), workspaces.map((workspace) => workspace.case));
-      setView("calls");
-      $("importStatus").textContent = failures ? "部分檔案匯入完成；失敗項目請見下方。" : "匯入完成。";
-    } else {
-      $("importStatus").textContent = "所有檔案均匯入失敗，原資料未變更。";
-    }
+    await runBatchedFileImport({
+      files,
+      statusNode: $("importStatus"),
+      resultsNode: $("importResults"),
+      appendResult: appendImportResult,
+      appendError: appendImportError,
+      onSuccess(workspaces, failures) {
+        applyWorkspace(mergeWorkspaces(workspaces), workspaces.map((workspace) => workspace.case));
+        setView("calls");
+        $("importStatus").textContent = failures ? "部分檔案匯入完成；失敗項目請見下方。" : "匯入完成。";
+      },
+      allFailedMessage: "所有檔案均匯入失敗，原資料未變更。",
+    });
     $("fileInput").value = "";
   }
 
   async function handleMultiLocationImport(event) {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
-    $("multiLocationImportStatus").textContent = `匯入 ${files.length} 個檔案中...`;
-    $("multiLocationImportResults").innerHTML = "";
+    await runBatchedFileImport({
+      files,
+      statusNode: $("multiLocationImportStatus"),
+      resultsNode: $("multiLocationImportResults"),
+      appendResult: appendMultiLocationImportResult,
+      appendError: appendMultiLocationImportError,
+      onSuccess(workspaces, failures) {
+        const workspace = mergeWorkspaces(workspaces);
+        showImportProgress("位置比對中", "正在比對多門號位置，請稍候。", files.length, files.length);
+        const analysis = computeMultiNumberLocationMatches(workspace, { windowMinutes: MULTI_LOCATION_WINDOW_MINUTES });
+        state.multiLocationWorkspace = workspace;
+        state.multiLocationMatches = analysis.matches;
+        state.multiLocationExcluded = analysis.excluded;
+        state.multiLocationPage = 1;
+        state.multiLocationExpandedMatches = new Set();
+        renderMultiLocationView();
+        $("multiLocationImportStatus").textContent = failures
+          ? "部分檔案匯入完成；失敗項目請見下方。"
+          : "匯入與位置比對完成。";
+      },
+      allFailedMessage: "所有檔案均匯入失敗，原多門號位置資料未變更。",
+    });
+    $("multiLocationFileInput").value = "";
+  }
+
+  async function runBatchedFileImport({ files, statusNode, resultsNode, appendResult, appendError, onSuccess, allFailedMessage }) {
+    const total = files.length;
+    if (statusNode) statusNode.textContent = `匯入 ${total} 個檔案中...`;
+    if (resultsNode) resultsNode.innerHTML = "";
+    showImportProgress("準備中", "正在讀取檔案，畫面可能會暫停數秒。", 0, total);
+    await yieldToUi();
     const workspaces = [];
     let failures = 0;
-    for (const file of files) {
-      try {
-        const content = await readFileArrayBuffer(file);
-        const workspace = parseImportFile(file.name, content);
-        workspaces.push(workspace);
-        appendMultiLocationImportResult(workspace.case);
-      } catch (error) {
-        failures += 1;
-        appendMultiLocationImportError(file.name, error);
+    try {
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        showImportProgress("解析中", file.name, index + 1, total);
+        await yieldToUi();
+        try {
+          const content = await readFileArrayBuffer(file);
+          const workspace = await parseImportFileOffUi(file.name, content);
+          workspaces.push(workspace);
+          appendResult(workspace.case);
+        } catch (error) {
+          failures += 1;
+          appendError(file.name, error);
+        }
       }
+      if (workspaces.length) {
+        showImportProgress("整理畫面", "解析完成，正在更新目前畫面。", total, total);
+        await yieldToUi();
+        onSuccess(workspaces, failures);
+      } else if (statusNode) {
+        statusNode.textContent = allFailedMessage;
+      }
+    } finally {
+      hideImportProgress();
     }
-    if (workspaces.length) {
-      const workspace = mergeWorkspaces(workspaces);
-      const analysis = computeMultiNumberLocationMatches(workspace, { windowMinutes: MULTI_LOCATION_WINDOW_MINUTES });
-      state.multiLocationWorkspace = workspace;
-      state.multiLocationMatches = analysis.matches;
-      state.multiLocationExcluded = analysis.excluded;
-      state.multiLocationPage = 1;
-      state.multiLocationExpandedMatches = new Set();
-      renderMultiLocationView();
-      $("multiLocationImportStatus").textContent = failures
-        ? "部分檔案匯入完成；失敗項目請見下方。"
-        : "匯入與位置比對完成。";
-    } else {
-      $("multiLocationImportStatus").textContent = "所有檔案均匯入失敗，原多門號位置資料未變更。";
+  }
+
+  function showImportProgress(stage, detail, current, total) {
+    const modal = $("importProgressModal");
+    if (!modal) return;
+    modal.hidden = false;
+    modal.setAttribute("aria-busy", "true");
+    if ($("importProgressStage")) {
+      $("importProgressStage").textContent = total
+        ? `正在處理第 ${current}／${total} 個檔案`
+        : stage;
     }
-    $("multiLocationFileInput").value = "";
+    if ($("importProgressDetail")) {
+      $("importProgressDetail").textContent = detail || "大型檔案解析時請稍候，請勿關閉分頁。";
+    }
+    const fill = $("importProgressFill");
+    if (fill) fill.style.width = total ? `${Math.round((Math.max(current, 0) / total) * 100)}%` : "8%";
+  }
+
+  function hideImportProgress() {
+    const modal = $("importProgressModal");
+    if (!modal) return;
+    modal.hidden = true;
+    modal.setAttribute("aria-busy", "false");
+    if ($("importProgressFill")) $("importProgressFill").style.width = "0";
+  }
+
+  function yieldToUi() {
+    return new Promise((resolve) => {
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      } else {
+        setTimeout(resolve, 0);
+      }
+    });
+  }
+
+  function parseImportFileOffUi(fileName, bytes) {
+    if (typeof Worker === "undefined") {
+      return Promise.resolve(parseImportFile(fileName, bytes));
+    }
+    return new Promise((resolve, reject) => {
+      let worker;
+      try {
+        worker = new Worker("./import-parser.js?v=" + RELEASE_ASSET_VERSION);
+      } catch (_error) {
+        resolve(parseImportFile(fileName, bytes));
+        return;
+      }
+      const requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const timer = setTimeout(() => {
+        worker.terminate();
+        reject(new Error("解析逾時，請改分批匯入較小的檔案。"));
+      }, 5 * 60 * 1000);
+      worker.onmessage = (event) => {
+        if (!event.data || event.data.requestId !== requestId) return;
+        clearTimeout(timer);
+        worker.terminate();
+        if (event.data.ok) resolve(event.data.workspace);
+        else reject(new Error(event.data.message || "解析失敗"));
+      };
+      worker.onerror = () => {
+        clearTimeout(timer);
+        worker.terminate();
+        try {
+          resolve(parseImportFile(fileName, bytes));
+        } catch (error) {
+          reject(error);
+        }
+      };
+      worker.postMessage({ requestId, fileName, bytes });
+    });
   }
 
   function appendMultiLocationImportResult(item) {
@@ -504,17 +589,23 @@
     resetDateRangeState(state.callRecords);
     syncHotspotCountyFilterButton();
     syncDateFilterPanel();
-    prefillSubmissionPhones(state.callRecords);
-    renderAllViews();
+    prefillTicketPhones(state.callRecords);
+    renderActiveView();
+  }
+
+  function renderActiveView() {
+    if (typeof document === "undefined") return;
+    if (state.view === "calls") renderTwoWayCalls();
+    else if (state.view === "profile") renderProfileView();
+    else if (state.view === "stats") renderStatsView();
+    else if (state.view === "hours") renderHoursView();
+    else if (state.view === "multiLocation") renderMultiLocationView();
+    else if (state.view === "submission") renderTicketLookupView();
+    syncDateFilterPanel();
   }
 
   function renderAllViews() {
-    renderTwoWayCalls();
-    renderProfileView();
-    renderStatsView();
-    renderHoursView();
-    renderSubmissionPreview();
-    syncDateFilterPanel();
+    renderActiveView();
   }
 
   function resetDateRangeState(records) {
@@ -1262,41 +1353,78 @@
     </div>`;
   }
 
-  function setSubmissionDefaults() {
-    if (!$("submissionStartInput")) return;
-    const now = new Date();
-    const end = new Date(now.getTime() + 86400000);
-    $("submissionStartInput").value = toLocalDatetimeValue(now);
-    $("submissionEndInput").value = toLocalDatetimeValue(end);
+  function applyTicketRangeDefaults(now = new Date()) {
+    const range = ticketRangeDefaults(state.ticketQueryKind, now);
+    if ($("ticketStartInput")) $("ticketStartInput").value = toLocalDatetimeValue(range.startAt);
+    if ($("ticketEndInput")) $("ticketEndInput").value = toLocalDatetimeValue(range.endAt);
   }
 
-  function renderSubmissionPreview() {
-    if (!$("submissionSummary")) return;
-    const rows = normalizeSubmissionPhones($("submissionPhonesInput").value);
-    $("submissionSummary").innerHTML = `<span>有效 ${rows.valid.length}</span><span>錯誤 ${rows.invalid.length}</span><span>重複 ${rows.duplicates.length}</span>`;
-    $("submissionPreviewRows").innerHTML = [
-      ...rows.valid.map((phone) => `<div class="submission-row"><span>${escapeHtml(phone)}</span><strong>有效</strong></div>`),
-      ...rows.invalid.map((phone) => `<div class="submission-row danger-text"><span>${escapeHtml(phone)}</span><strong>錯誤</strong></div>`),
-    ].join("");
+  function setTicketQueryKind(kind) {
+    state.ticketQueryKind = kind === "live_location" ? "live_location" : "subscriber_profile";
+    applyTicketRangeDefaults();
+    renderTicketLookupView();
   }
 
-  function downloadSubmissionCsv() {
-    const csv = buildSubmissionCsv({
-      phones: $("submissionPhonesInput").value,
-      start: $("submissionStartInput").value,
-      end: $("submissionEndInput").value,
+  function renderTicketLookupView() {
+    if (!$("ticketSummary")) return;
+    document.querySelectorAll("[data-ticket-kind]").forEach((button) => {
+      const active = button.dataset.ticketKind === state.ticketQueryKind;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", active ? "true" : "false");
     });
-    downloadText(`phone-submission-${new Date().toISOString().slice(0, 10)}.csv`, csv, "text/csv;charset=utf-8");
-    $("submissionStatus").textContent = "已下載 CSV。";
+    const built = buildTicketLookupCsv({
+      sourceText: $("ticketSourceInput")?.value || "",
+      startAt: ticketDateFromInput($("ticketStartInput")?.value),
+      endAt: ticketDateFromInput($("ticketEndInput")?.value),
+      queryKind: state.ticketQueryKind,
+    });
+    if ($("ticketCsvOutput")) $("ticketCsvOutput").value = built.csvText;
+    $("ticketSummary").innerHTML = `<span>有效 ${built.acceptedCount}</span><span>略過 ${built.skippedCount}</span><span>重複 ${built.duplicateCount}</span>`;
   }
 
-  function prefillSubmissionPhones(records) {
-    const input = $("submissionPhonesInput");
+  function clearTicketSource() {
+    if ($("ticketSourceInput")) $("ticketSourceInput").value = "";
+    if ($("ticketStatus")) $("ticketStatus").textContent = "";
+    renderTicketLookupView();
+  }
+
+  async function copyTicketCsv() {
+    const text = $("ticketCsvOutput")?.value || "";
+    if (!text) {
+      if ($("ticketStatus")) $("ticketStatus").textContent = "沒有可複製的 CSV。";
+      return;
+    }
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+      else {
+        $("ticketCsvOutput").select();
+        document.execCommand("copy");
+      }
+      $("ticketStatus").textContent = "已複製 CSV。";
+    } catch (_error) {
+      $("ticketStatus").textContent = "複製失敗，請改用下載。";
+    }
+  }
+
+  function downloadTicketCsv() {
+    const built = buildTicketLookupCsv({
+      sourceText: $("ticketSourceInput")?.value || "",
+      startAt: ticketDateFromInput($("ticketStartInput")?.value),
+      endAt: ticketDateFromInput($("ticketEndInput")?.value),
+      queryKind: state.ticketQueryKind,
+    });
+    downloadText(`phone-ticket-${new Date().toISOString().slice(0, 10)}.csv`, built.csvText, "text/csv;charset=utf-8");
+    $("ticketStatus").textContent = "已下載 CSV。";
+  }
+
+  function prefillTicketPhones(records) {
+    const input = $("ticketSourceInput");
     if (!input) return [];
     const phones = collectSubmissionPhones(records);
     input.value = phones.join("\n");
-    const status = $("submissionStatus");
+    const status = $("ticketStatus");
     if (status) status.textContent = phones.length ? `已自匯入資料填入 ${phones.length} 支不重複電話。` : "";
+    renderTicketLookupView();
     return phones;
   }
 
@@ -1325,27 +1453,82 @@
     return phones;
   }
 
-  function buildSubmissionCsv({ phones, start, end }) {
-    const rows = normalizeSubmissionPhones(phones).valid;
-    const header = ["phone", "start_at", "end_at"];
-    return [header, ...rows.map((phone) => [phone, start || "", end || ""])].map(csvLine).join("\r\n");
+  const TICKET_LANDLINE_AREA_CODES = ["0836", "037", "049", "082", "089", "02", "03", "04", "05", "06", "07", "08"];
+  const TICKET_LIVE_RANGE_DAYS = 29;
+
+  function formatTicketTimestamp(date) {
+    const value = date instanceof Date ? date : ticketDateFromInput(date);
+    if (Number.isNaN(value.getTime())) return "";
+    return `${value.getFullYear()}${pad(value.getMonth() + 1)}${pad(value.getDate())}${pad(value.getHours())}${pad(value.getMinutes())}${pad(value.getSeconds())}`;
   }
 
-  function normalizeSubmissionPhones(text) {
-    const valid = [];
-    const invalid = [];
-    const duplicates = [];
+  function ticketDateFromInput(value) {
+    if (value instanceof Date) return value;
+    const text = String(value || "").trim();
+    if (!text) return new Date(NaN);
+    return new Date(text);
+  }
+
+  function ticketRangeDefaults(queryKind, now = new Date()) {
+    const startAt = new Date(now.getTime());
+    const endAt = new Date(now.getTime());
+    if (queryKind === "live_location") {
+      endAt.setDate(endAt.getDate() + TICKET_LIVE_RANGE_DAYS);
+      return { startAt, endAt };
+    }
+    startAt.setFullYear(startAt.getFullYear() - 1);
+    endAt.setDate(endAt.getDate() - 1);
+    return { startAt, endAt };
+  }
+
+  function classifyTicketNumber(line) {
+    const text = String(line || "").trim();
+    if (!text) return null;
+    const digitTokens = text.split(/\s+/).filter((token) => token.replace(/\D+/g, "").length >= 6);
+    if (digitTokens.length > 1) return null;
+    const digits = text.replace(/\D+/g, "");
+    if (!digits) return null;
+    if (/^8869\d{8}$/.test(digits)) return { lineKind: "mobile", ticketValue: digits };
+    if (/^09\d{8}$/.test(digits)) return { lineKind: "mobile", ticketValue: `886${digits.slice(1)}` };
+    if (/^9\d{8}$/.test(digits)) return { lineKind: "mobile", ticketValue: `886${digits}` };
+    if (digits.startsWith("0800") || digits.startsWith("020")) return null;
+    const national = digits.startsWith("886") ? `0${digits.slice(3)}` : digits;
+    for (const area of TICKET_LANDLINE_AREA_CODES) {
+      if (!national.startsWith(area)) continue;
+      const rest = national.slice(area.length);
+      if (rest.length < 5 || rest.length > 8) continue;
+      return { lineKind: "landline", ticketValue: `${area}-${rest}` };
+    }
+    return null;
+  }
+
+  function buildTicketLookupCsv({ sourceText, startAt, endAt, queryKind }) {
+    const startStamp = formatTicketTimestamp(startAt);
+    const endStamp = formatTicketTimestamp(endAt);
+    const purpose = queryKind === "live_location" ? "即時定位" : "使用者資料";
+    const lines = [];
     const seen = new Set();
-    String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).forEach((line) => {
-      const phone = normalizePhoneText(line);
-      if (!phone) invalid.push(line);
-      else if (seen.has(phone)) duplicates.push(phone);
-      else {
-        seen.add(phone);
-        valid.push(phone);
+    let acceptedCount = 0;
+    let duplicateCount = 0;
+    let skippedCount = 0;
+    String(sourceText || "").split(/\r?\n/).forEach((rawLine) => {
+      const line = rawLine.trim();
+      if (!line) return;
+      const classified = classifyTicketNumber(line);
+      if (!classified || (queryKind === "live_location" && classified.lineKind === "landline")) {
+        skippedCount += 1;
+        return;
       }
+      if (seen.has(classified.ticketValue)) {
+        duplicateCount += 1;
+        return;
+      }
+      seen.add(classified.ticketValue);
+      const kindLabel = classified.lineKind === "landline" ? "市內電話" : "行動電話";
+      lines.push([kindLabel, "-", classified.ticketValue, startStamp, endStamp, purpose].join(","));
+      acceptedCount += 1;
     });
-    return { valid, invalid, duplicates };
+    return { csvText: lines.join("\n"), acceptedCount, duplicateCount, skippedCount };
   }
 
   function exportWorkspaceJson() {
@@ -1590,18 +1773,25 @@
     const workbook = XLSX.read(bytes, { type: "array", cellDates: false });
     const sheets = workbook.SheetNames.map((title) => {
       const displayRows = XLSX.utils.sheet_to_json(workbook.Sheets[title], { header: 1, defval: "", raw: false, blankrows: false });
-      const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[title], { header: 1, defval: "", raw: true, blankrows: false });
       return {
         title,
         rows: displayRows.map((values, index) => ({
           rowNumber: index + 1,
           values: values.map(cellText),
-          rawValues: rawRows[index] || values,
+          rawValues: values,
         })),
       };
     });
     const fetOrder = fetOrderHeaders(sheets);
-    if (fetOrder.length) return parseFetOrderXlsx(fileName, sheets, fetOrder);
+    if (fetOrder.length) {
+      sheets.forEach((sheet) => {
+        const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheet.title], { header: 1, defval: "", raw: true, blankrows: false });
+        sheet.rows.forEach((row, index) => {
+          row.rawValues = rawRows[index] || row.values;
+        });
+      });
+      return parseFetOrderXlsx(fileName, sheets, fetOrderHeaders(sheets));
+    }
     const chtProsecutor = chtProsecutorHeaders(sheets);
     if (chtProsecutor) return parseChtProsecutor(fileName, sheets, chtProsecutor);
     const fetProsecutorCall = fetProsecutorCallHeaders(sheets);
@@ -3461,7 +3651,10 @@
     computeMultiNumberLocationMatches,
     computeDateRangeBounds,
     filterRecordsByDateRange,
-    buildSubmissionCsv,
+    classifyTicketNumber,
+    formatTicketTimestamp,
+    ticketRangeDefaults,
+    buildTicketLookupCsv,
     collectSubmissionPhones,
     collectUniqueImeis,
     normalizePhoneText,
