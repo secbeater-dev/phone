@@ -534,7 +534,7 @@ test("keeps the existing Taiwan Mobile parser behavior", () => {
   assert.equal(workspace.records[0].direction, "outbound");
 });
 
-const ASSET_VERSION = "20260827-notice-ticket-import-v1";
+const ASSET_VERSION = "20260827-notice-card-layout-v1";
 
 test("builds independent carrier ticket lookup CSV for profile and live location", () => {
   const now = new Date(2026, 7, 27, 8, 25, 12);
@@ -594,12 +594,17 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   assert.match(html, /資料均在本地運行，請安心使用。/);
   assert.doesNotMatch(html, /基地台轉經緯度/);
   assert.match(html, /https:\/\/t\.me\/tg_secbeater/);
+  assert.match(html, /支援檔案類型：請私訊<a href="https:\/\/t\.me\/tg_secbeater"[^>]*>作者<\/a>/);
+  assert.doesNotMatch(html, />https:\/\/t\.me\/tg_secbeater</);
+  assert.doesNotMatch(html, />請私訊作者</);
   assert.match(html, /強制重載最新版（等同 Ctrl\+F5）。強制重啟只更新網頁，不會清除本機設定（備註、主題等）。/);
   assert.match(html, /id="hardReloadButton"[^>]*>強制重啟<\/button>/);
   assert.match(html, /href="https:\/\/car\.secbeater\.com\/"/);
   assert.match(html, /href="https:\/\/shrimp\.secbeater\.com\/"/);
   assert.match(html, /src="\.\/assets\/vehicle-id\.jpg"/);
   assert.match(html, /src="\.\/assets\/shrimp-shell\.jpg"/);
+  assert.match(html, /<span>車輛辨識系統<\/span>/);
+  assert.match(html, /<span>蝦殼分析網站<\/span>/);
   assert.match(html, /id="importProgressModal"/);
   assert.match(html, /id="ticketSourceInput"/);
   assert.match(html, /id="ticketCsvOutput"/);
@@ -623,6 +628,8 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   assert.doesNotMatch(appSource, /phone-workbench-date-range/);
   assert.match(styles, /\.date-filter-card\s*\{/);
   assert.match(styles, /\.notice-project-card\s*\{/);
+  assert.match(styles, /object-fit:\s*contain/);
+  assert.doesNotMatch(styles, /\.notice-project-card img[\s\S]{0,180}object-fit:\s*cover/);
   assert.match(styles, /\.import-progress-card\s*\{/);
   assert.match(html, /data-view="multiLocation"[^>]*>[\s\S]*?多門號位置<\/strong>/);
   assert.match(html, /id="mainImportPanel" class="sidebar-panel"/);

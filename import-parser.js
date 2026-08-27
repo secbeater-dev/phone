@@ -1,8 +1,8 @@
 /* Dedicated import worker. Keep identifiers independent of the main UI layer. */
 /* global importScripts, PhoneWorkbench */
 importScripts(
-  "./vendor/xlsx.full.min.js?v=20260827-notice-ticket-import-v1",
-  "./app.js?v=20260827-notice-ticket-import-v1"
+  "./vendor/xlsx.full.min.js?v=20260827-notice-card-layout-v1",
+  "./app.js?v=20260827-notice-card-layout-v1"
 );
 
 self.onmessage = function onImportParserMessage(event) {
