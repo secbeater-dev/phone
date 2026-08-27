@@ -12,6 +12,7 @@ local-data/
 phone-workspace-*.json
 phone-local-settings-*.json
 phone-submission-*.csv
+phone-ticket-*.csv
 附卷*.pdf
 phone-attachment-*.pdf
 

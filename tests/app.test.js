@@ -534,17 +534,77 @@ test("keeps the existing Taiwan Mobile parser behavior", () => {
   assert.equal(workspace.records[0].direction, "outbound");
 });
 
+const ASSET_VERSION = "20260827-notice-ticket-import-v1";
+
+test("builds independent carrier ticket lookup CSV for profile and live location", () => {
+  const now = new Date(2026, 7, 27, 8, 25, 12);
+  assert.deepEqual(PhoneWorkbench.classifyTicketNumber("0912-345-678"), { lineKind: "mobile", ticketValue: "886912345678" });
+  assert.deepEqual(PhoneWorkbench.classifyTicketNumber("+886912345678"), { lineKind: "mobile", ticketValue: "886912345678" });
+  assert.deepEqual(PhoneWorkbench.classifyTicketNumber("912345678"), { lineKind: "mobile", ticketValue: "886912345678" });
+  assert.deepEqual(PhoneWorkbench.classifyTicketNumber("02-2345-6789"), { lineKind: "landline", ticketValue: "02-23456789" });
+  assert.deepEqual(PhoneWorkbench.classifyTicketNumber("037-123456"), { lineKind: "landline", ticketValue: "037-123456" });
+  assert.equal(PhoneWorkbench.classifyTicketNumber("0800-123-456"), null);
+  assert.equal(PhoneWorkbench.classifyTicketNumber("0900000401 0900000402"), null);
+
+  const profileRange = PhoneWorkbench.ticketRangeDefaults("subscriber_profile", now);
+  assert.equal(PhoneWorkbench.formatTicketTimestamp(profileRange.startAt), "20250827082512");
+  assert.equal(PhoneWorkbench.formatTicketTimestamp(profileRange.endAt), "20260826082512");
+  const liveRange = PhoneWorkbench.ticketRangeDefaults("live_location", now);
+  assert.equal(PhoneWorkbench.formatTicketTimestamp(liveRange.startAt), "20260827082512");
+  assert.equal(PhoneWorkbench.formatTicketTimestamp(liveRange.endAt), "20260925082512");
+
+  const profile = PhoneWorkbench.buildTicketLookupCsv({
+    sourceText: "0912-345-678\n02-2345-6789\n0912-345-678\nabc",
+    startAt: profileRange.startAt,
+    endAt: profileRange.endAt,
+    queryKind: "subscriber_profile",
+  });
+  assert.equal(profile.csvText, [
+    "行動電話,-,886912345678,20250827082512,20260826082512,使用者資料",
+    "市內電話,-,02-23456789,20250827082512,20260826082512,使用者資料",
+  ].join("\n"));
+  assert.equal(profile.acceptedCount, 2);
+  assert.equal(profile.duplicateCount, 1);
+  assert.equal(profile.skippedCount, 1);
+
+  const live = PhoneWorkbench.buildTicketLookupCsv({
+    sourceText: "0912345678\n02-23456789",
+    startAt: liveRange.startAt,
+    endAt: liveRange.endAt,
+    queryKind: "live_location",
+  });
+  assert.equal(live.csvText, "行動電話,-,886912345678,20260827082512,20260925082512,即時定位");
+  assert.equal(live.acceptedCount, 1);
+  assert.equal(live.skippedCount, 1);
+  assert.doesNotMatch(fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8"), /chundev|lookup\/phone|CSV格式/);
+});
+
 test("HTML uses pinned local scripts and contains no analytics tag", () => {
   const root = path.resolve(__dirname, "..");
   const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
   const styles = fs.readFileSync(path.join(root, "styles.css"), "utf8");
   const appSource = fs.readFileSync(path.join(root, "app.js"), "utf8");
+  const workerSource = fs.readFileSync(path.join(root, "import-parser.js"), "utf8");
   assert.doesNotMatch(html, /googletagmanager|gtag\s*\(/i);
   assert.doesNotMatch(html, /tellows\.tw/i);
-  assert.match(html, /href="\.\/styles\.css\?v=20260812-multi-number-source-detail-v1"/);
-  assert.match(html, /今日重點（2026-08-12）/);
-  assert.match(html, /新增「多門號位置」/);
-  assert.match(html, /同一縣市、行政區 30 分鐘內出現/);
+  assert.match(html, new RegExp(`href="\\.\\/styles\\.css\\?v=${ASSET_VERSION}"`));
+  assert.doesNotMatch(html, /今日重點|Gemini Pro|家庭分享教學|ai-partner\.webp|secbeater\.notion\.site/);
+  assert.match(html, /href="https:\/\/secbeater\.com\/"/);
+  assert.match(html, /aria-label="SecBeater"/);
+  assert.match(html, /資料均在本地運行，請安心使用。/);
+  assert.doesNotMatch(html, /基地台轉經緯度/);
+  assert.match(html, /https:\/\/t\.me\/tg_secbeater/);
+  assert.match(html, /強制重載最新版（等同 Ctrl\+F5）。強制重啟只更新網頁，不會清除本機設定（備註、主題等）。/);
+  assert.match(html, /id="hardReloadButton"[^>]*>強制重啟<\/button>/);
+  assert.match(html, /href="https:\/\/car\.secbeater\.com\/"/);
+  assert.match(html, /href="https:\/\/shrimp\.secbeater\.com\/"/);
+  assert.match(html, /src="\.\/assets\/vehicle-id\.jpg"/);
+  assert.match(html, /src="\.\/assets\/shrimp-shell\.jpg"/);
+  assert.match(html, /id="importProgressModal"/);
+  assert.match(html, /id="ticketSourceInput"/);
+  assert.match(html, /id="ticketCsvOutput"/);
+  assert.match(html, /data-ticket-kind="subscriber_profile"/);
+  assert.match(html, /data-ticket-kind="live_location"/);
   assert.match(html, /id="dateFilterPanel" class="sidebar-panel date-filter-panel" hidden/);
   assert.match(html, /id="dateFilterButton"[^>]+aria-controls="dateFilterModal"/);
   assert.match(html, /id="dateFilterModal"[^>]+role="dialog"[^>]+aria-modal="true"/);
@@ -554,8 +614,16 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   assert.match(appSource, /computeDateRangeBounds/);
   assert.match(appSource, /filterRecordsByDateRange/);
   assert.match(appSource, /scope_label: `日期篩選/);
+  assert.match(appSource, /function runHardReload/);
+  assert.doesNotMatch(appSource, /localStorage\.clear\(\)/);
+  assert.doesNotMatch(appSource, /sessionStorage\.clear\(\)/);
+  assert.match(appSource, /new Worker\(/);
+  assert.match(appSource, /import-parser\.js\?v=/);
+  assert.match(appSource, /function renderActiveView/);
   assert.doesNotMatch(appSource, /phone-workbench-date-range/);
   assert.match(styles, /\.date-filter-card\s*\{/);
+  assert.match(styles, /\.notice-project-card\s*\{/);
+  assert.match(styles, /\.import-progress-card\s*\{/);
   assert.match(html, /data-view="multiLocation"[^>]*>[\s\S]*?多門號位置<\/strong>/);
   assert.match(html, /id="mainImportPanel" class="sidebar-panel"/);
   assert.match(html, /id="multiLocationFileInput"[^>]+accept="\.xlsx,\.xml" multiple/);
@@ -588,29 +656,26 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   assert.doesNotMatch(html, /遠傳 XLSX/);
   assert.doesNotMatch(html, /個資提醒|請依個資規範妥善保管/);
   assert.doesNotMatch(appSource, /請依個資規範妥善保管/);
-  assert.match(html, /NT\$1,500/);
-  assert.match(html, /家庭分享教學/);
-  assert.match(html, /https:\/\/families\.google\/intl\/zh-TW_ALL\/families\//);
-  assert.match(html, /https:\/\/t\.me\/tg_secbeater/);
-  assert.match(html, /https:\/\/secbeater\.notion\.site\/3a939de98f3680188191d3ae931a2684/);
-  assert.match(html, /更多類型網站點此/);
-  assert.match(html, /https:\/\/secbeater\.notion\.site\//);
   assert.doesNotMatch(html, /supportPasswordInput|SUPPORT_PASSWORD|目前支援檔案類型/);
+  assert.match(workerSource, /importScripts\(/);
+  assert.match(workerSource, /parseImportFile/);
 
   for (const relativePath of ["vendor/xlsx.full.min.js", "attachment-export.js", "app.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
-    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=20260812-multi-number-source-detail-v1"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+    assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=${ASSET_VERSION}"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
     assert.ok(html.includes(`'${sri}'`));
   }
   for (const relativePath of ["vendor/exceljs.min.js", "vendor/pdf-lib.min.js", "vendor/fontkit.umd.min.js", "vendor/open-huninn-data.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
     assert.ok(html.includes(`'${sri}'`));
-    assert.ok(appSource.includes(`./${relativePath}?v=20260812-multi-number-source-detail-v1`));
+    assert.ok(appSource.includes(`./${relativePath}?v=${ASSET_VERSION}`));
     assert.ok(appSource.includes(sri));
   }
   assert.match(html, /connect-src 'none'/);
+  assert.match(html, /script-src 'self'/);
+  assert.match(html, /worker-src 'self'/);
   assert.match(appSource, /CALL_PAGE_SIZE = 500/);
   assert.doesNotMatch(appSource, /rows\.slice\(0,\s*5000\)/);
   const navigation = html.match(/<nav class="nav-list"[^>]*>([\s\S]*?)<\/nav>/)?.[1] || "";
@@ -628,6 +693,10 @@ test("Pages deploys attachment assets from an explicit file allowlist", () => {
   const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "pages.yml"), "utf8");
   const ignore = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
   assert.match(workflow, /attachment-export\.js/);
+  assert.match(workflow, /import-parser\.js/);
+  assert.match(workflow, /vehicle-id\.jpg/);
+  assert.match(workflow, /shrimp-shell\.jpg/);
+  assert.doesNotMatch(workflow, /ai-partner\.webp/);
   for (const asset of ["exceljs.min.js", "pdf-lib.min.js", "fontkit.umd.min.js", "open-huninn-data.js", "fontkit-NOTICE.txt", "open-huninn-LICENSE.txt"]) {
     assert.ok(workflow.includes(asset), `${asset} must be explicitly deployed`);
   }

@@ -4,7 +4,7 @@
 
 ## 1. 專案定位
 
-Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具。使用者選取的 XLSX/XML 由瀏覽器內的 `FileReader`、本地 SheetJS 與 `app.js` 處理；附卷由本地 ExcelJS/pdf-lib 產生；沒有後端、API、資料庫、Service Worker 或上傳端點。
+Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具。使用者選取的 XLSX/XML 由瀏覽器內的 `FileReader` 讀取後，交由同源 `import-parser.js` Worker（失敗時退回主執行緒）搭配本地 SheetJS 與 `app.js` 處理；附卷由本地 ExcelJS/pdf-lib 產生；沒有後端、API、資料庫、Service Worker 或上傳端點。
 
 功能包括同批多檔合併、通聯列表、用戶資料、電話統計、時間分布、基地台熱點、多門號位置、電話投單，以及附卷 XLSX/PDF、workspace、CSV 與本機設定匯出。
 
@@ -23,6 +23,7 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 ├─ attachment-export.js         # 六分頁 XLSX 與六類文字 PDF 產生器
 ├─ assets/                      # 站內圖片
 ├─ fullview.md                  # 本文件
+├─ import-parser.js             # 匯入解析 Web Worker，importScripts 同源 SheetJS 與 app.js
 ├─ index.html                   # 主頁 DOM、CSP 與 SRI
 ├─ README.md                    # 使用、隱私及維護提示
 ├─ styles.css                   # 版面、主題與響應式樣式
@@ -40,10 +41,10 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 
 ## 3. 載入順序
 
-1. `index.html` 建立側欄、七個 view、一般與多門號位置匯入控制、全域日期篩選視窗、熱點縣市篩選視窗、附卷匯出視窗與使用提醒；提醒中的「今日重點」列出目前發布的使用者可見更新，Gemini 區塊使用原生 `details` 顯示家庭分享教學。
-2. 瀏覽器透過固定發布版本查詢字串載入 `styles.css`、`vendor/xlsx.full.min.js`、`attachment-export.js` 與 `app.js`；三個 script 驗證 SHA-384 SRI 後依序執行。版本字串避免舊快取與新版資產衝突，CSP 不允許其他 script。
+1. `index.html` 建立側欄、七個 view、一般與多門號位置匯入控制、全域日期篩選視窗、熱點縣市篩選視窗、附卷匯出視窗、使用提醒與匯入進度遮罩；提醒只保留本地運行說明、作者 Telegram、強制重啟（只更新網頁、不清本機設定），以及車輛辨識／蝦殼分析的站內圖片連結。
+2. 瀏覽器透過固定發布版本查詢字串載入 `styles.css`、`vendor/xlsx.full.min.js`、`attachment-export.js` 與 `app.js`；三個 script 驗證 SHA-384 SRI 後依序執行。版本字串避免舊快取與新版資產衝突。`script-src` 含 `'self'` 與雜湊，讓同源 Worker 的 `importScripts` 可載入解析檔；`worker-src` 為 `'self'`。
 3. `app.js` 與 `attachment-export.js` 均以 UMD 包裝，可供瀏覽器及 Node 測試使用。只有使用者按下附卷下載時，`app.js` 才以固定版本路徑與 SRI 延遲載入 ExcelJS，或依序載入 pdf-lib、fontkit 與字型資料。
-4. `DOMContentLoaded` 執行 `init()`，還原偏好、綁定事件並渲染所有 view。
+4. `DOMContentLoaded` 執行 `init()`，還原偏好、綁定事件並只渲染目前作用中的 view。
 
 ## 4. 狀態模型
 
@@ -58,17 +59,19 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 - `dateRangeBounds`、`dateRange`、`dateRangeDraft`：全部可解析通聯的日期界線、目前套用日期及彈窗草稿；只存在記憶體，新 workspace 成功匯入時重設為完整資料。
 - `multiLocationWorkspace`、`multiLocationMatches`、`multiLocationExcluded`、`multiLocationPage`、`multiLocationExpandedMatches`：多門號位置專用的獨立合併 workspace、符合事件、排除計數、500 筆分頁與目前展開的原始資料識別碼；只存在記憶體，不取代一般 workspace，也不讀取一般全域日期範圍。新批次成功匯入時展開集合清空。
 - `theme`、`sidebarCollapsed`：介面偏好。
+- `ticketQueryKind`：電話投單用途，`subscriber_profile` 或 `live_location`，只存在記憶體。
 
 ## 5. 匯入與格式判定
 
 ```text
 一批 file input
-  → 逐檔 FileReader.readAsArrayBuffer → parseImportFile
+  → 顯示不可關閉的處理中遮罩（兩次 rAF 後開始）
+  → 逐檔 FileReader.readAsArrayBuffer → Worker parseImportFile（失敗則主執行緒）
   ├─ XML → 依 BOM／encoding 宣告解碼 → parseXmlWorkbook → XML 格式 parser
   └─ XLSX → XLSX.read → parseXlsxWorkbook
-       → 格式偵測 → 格式 parser
+       → 格式偵測 → 格式 parser；僅遠傳 Order 再補 raw cell
   → 成功 workspace 集合 → mergeWorkspaces（一次）
-  → applyWorkspace → 切換通聯列表 → renderAllViews
+  → applyWorkspace → 切換通聯列表 → renderActiveView
 ```
 
 同一次選取的所有成功檔案合併成一個 workspace；部分失敗仍保留成功項目並顯示失敗狀態，全部失敗則不改變現有資料。下一批只要至少一檔成功，就以該批合併結果取代目前 workspace。合併時重算摘要、電話統計、時間分布及基地台；同名 `subject` 欄位的不同非空值去重後以 `、` 合併。
@@ -174,11 +177,12 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 - `renderStatsView`：依全域日期及明確/衍生方向統計來電、去電及完整排行；三種排行均顯示全部電話，不截斷前 20 名。
 - `renderMultiLocationView`：顯示獨立批次的時間範圍、縣市、行政區、不同調閱門號及共用備註，每頁 500 筆；沒有符合事件時顯示正常空狀態。每筆摘要預設收合，原始資料按鈕以 `aria-expanded`/`aria-controls` 控制緊接摘要的跨欄明細列；明細一筆來源通聯一列，顯示來源檔/工作表/列號、時間、雙方號碼及本次行政區匹配的基地台角色、代碼、原始地址，且不計入摘要分頁筆數。門號備註可直接編輯，沿用 `data-phone-note` 與相同 localStorage key，因此會同步通聯列表及電話統計。
 - `renderHoursView`：全域日期先套用，再與 24 小時選擇、地址搜尋及縣市條件取交集。熱點搜尋右側的綠色齒輪開啟縣市篩選；使用者可在現行 22 縣市及「未辨識」間多選，並以「全選」或「全部取消」快速調整草稿。按套用後才過濾熱點列表；取消、背景點擊或 Escape 會放棄草稿。全部取消時套用維持停用，至少重新選一項後才能套用。
-- `renderSubmissionPreview`：電話驗證、去重、投單預覽與 CSV。
+- `renderTicketLookupView`：雙欄即時產生調閱 CSV。`subscriber_profile` 預設約一年前至昨日，行動與市內都產出；`live_location` 預設現在至 29 天後，只產出行動電話。輸出六欄 `類型,-,號碼,起,迄,用途`，時間為本地 `YYYYMMDDHHmmss`。無法分類或即時定位的市內電話計入略過，不留空白行。
 - `renderExportView`：workspace JSON 與本機設定匯出；入口位於側欄下方工具區，切換後顯示選取狀態。
 - 主功能導覽「附卷檔案匯出」：開啟含進度與錯誤狀態的視窗，不切換目前 view；沒有 workspace/records 時停用下載。
 - 「資料匯入」下方的「時間篩選」：只有 workspace 成功匯入後顯示；縮合側欄只保留日期圖示。黑白彈窗以上下排列的起訖 `date` 欄位設定包含首末整日的範圍；起始晚於結束時停用篩選。取消、背景或 Escape 放棄草稿；「回復預設」立即恢復完整資料、重繪並關閉彈窗。
-- 使用提醒：顯示不含特定電信商名稱的多檔案匯入說明、當日更新、Gemini 優惠與可展開家庭分享教學；支援格式區提供作者 Telegram 與更多類型 Notion 頁面。
+- 使用提醒：本地運行說明、作者 Telegram、強制重載最新版（等同 Ctrl+F5；只更新網頁，不會清除備註、主題等本機設定），以及車輛辨識／蝦殼分析的同源圖片連結。左上角品牌連到 `https://secbeater.com/`。
+- 匯入進度：全螢幕遮罩顯示第 n／m 個檔案與目前檔名，不可點背景關閉。
 
 匯入值進入 HTML 字串前由 `escapeHtml` 處理。電話只以 `.phone-value` 純文字顯示，不產生外部查詢連結。下載由 `Blob`、`URL.createObjectURL` 與 `download` 屬性在本機完成，觸發後撤銷 Object URL。
 
@@ -199,7 +203,7 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 ## 9. 隱私與信任邊界
 
 - 三個 HTML 都設定 `no-referrer`；已移除 Google Analytics。
-- `index.html` 的 CSP 將 `connect-src`、`object-src`、`form-action`、`frame-src`、`worker-src`、`media-src` 與 `manifest-src` 設為 `none`，圖片與字型限同源/data，script 只允許對應目前位元組的 SHA-384；靜態入口與四個延遲載入匯出資產都同時受 CSP hash、SRI 與固定版本查詢字串保護。`style-src-attr` 只為既有圖表高度與可調欄寬保留 inline CSS。
+- `index.html` 的 CSP 將 `connect-src`、`object-src`、`form-action`、`frame-src`、`media-src` 與 `manifest-src` 設為 `none`；`worker-src` 為 `'self'`，`script-src` 為 `'self'` 加上目前位元組的 SHA-384。圖片與字型限同源/data。靜態入口與四個延遲載入匯出資產都同時受 CSP hash、SRI 與固定版本查詢字串保護。同源 Worker 只用於匯入解析，不會連網。`style-src-attr` 只為既有圖表高度、可調欄寬與匯入進度條保留 inline CSS。
 - `404.html` 與 `admin.html` 使用 `script-src 'none'`。
 - 沒有 `fetch`、XHR、WebSocket、EventSource、Beacon、表單提交或檔案上傳路徑；匯出套件與字型皆從同源固定檔案載入，資料只在瀏覽器記憶體中交給 Blob。
 - 電話不再連往 Tellows；Cloudflare/其他注入 script 不在 CSP 許可清單內。
@@ -221,14 +225,14 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 1. checkout。
 2. 拒絕 Git 追蹤的 XLSX/XLS/XML/CSV/TSV、私密資料目錄及本機匯出檔。
 3. 使用 Node 22 執行測試。
-4. 以逐檔白名單把 `.nojekyll`、三個 HTML、`app.js`、`attachment-export.js`、`styles.css`、兩個圖片，以及固定版本的五個 vendor 程式/字型檔與四份授權檔複製到 `_site`。
+4. 以逐檔白名單把 `.nojekyll`、三個 HTML、`app.js`、`attachment-export.js`、`import-parser.js`、`styles.css`、三個圖片，以及固定版本的五個 vendor 程式/字型檔與四份授權檔複製到 `_site`。
 5. 上傳 `_site` 並部署 Pages。
 
 自訂網域 `phone.secbeater.com` 保留在既有 Pages/Cloudflare 設定。正式站必須驗證 HTTP、資產版本、CSP/SRI、功能及第三方 script 未執行；若 Cloudflare challenge 或 Browser Insights 仍執行或破壞頁面，應停止宣告完成並由站方停用相關功能或改為 DNS-only。
 
 ## 12. Node 匯出介面
 
-`app.js` 輸出：`parseImportFile`、`mergeWorkspaces`、`normalizeWorkspace`、`buildAttachmentReport`、`computePhoneStats`、`computeHourBuckets`、`computeAddressHotspots`、`classifyTaiwanCounty`、`classifyTaiwanAdministrativeArea`、`computeTaiwanCountyStats`、`computeMultiNumberLocationMatches`、`computeDateRangeBounds`、`filterRecordsByDateRange`、`buildSubmissionCsv`、`collectSubmissionPhones`、`collectUniqueImeis`、`normalizePhoneText`、`tellowsUrl`（僅相容舊程式碼，畫面不使用）、`hourButtonLabel`。`attachment-export.js` 輸出六張工作表/六種 PDF 定義、`createAttachmentXlsx`、`createAttachmentPdf` 與 `safeText`。
+`app.js` 輸出：`parseImportFile`、`mergeWorkspaces`、`normalizeWorkspace`、`buildAttachmentReport`、`computePhoneStats`、`computeHourBuckets`、`computeAddressHotspots`、`classifyTaiwanCounty`、`classifyTaiwanAdministrativeArea`、`computeTaiwanCountyStats`、`computeMultiNumberLocationMatches`、`computeDateRangeBounds`、`filterRecordsByDateRange`、`classifyTicketNumber`、`formatTicketTimestamp`、`ticketRangeDefaults`、`buildTicketLookupCsv`、`collectSubmissionPhones`、`collectUniqueImeis`、`normalizePhoneText`、`tellowsUrl`（僅相容舊程式碼，畫面不使用）、`hourButtonLabel`。`attachment-export.js` 輸出六張工作表/六種 PDF 定義、`createAttachmentXlsx`、`createAttachmentPdf` 與 `safeText`。
 
 ## 13. 維護檢查表
 
@@ -255,3 +259,6 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 - 2026-08-02：資料匯入下方新增記憶體內全域日期篩選；分析畫面與附卷依包含首末整日的範圍重算，workspace JSON 與電話投單維持完整原始資料。
 - 2026-08-12：新增獨立記憶體批次的「多門號位置」view，依現行縣市/行政區及包含端點的 30 分鐘滑動視窗比對不同調閱門號，並同步既有瀏覽器電話備註；一般 workspace、時間篩選與匯出流程維持不變。
 - 2026-08-12：多門號位置的每筆匹配新增預設收合的原始資料明細列，顯示來源位置、時間、雙方號碼與本次匹配基地台；同筆同區基地台合併，完整來源列不寫入標準 schema 或匯出。
+- 2026-08-27：使用提醒改為本地運行說明、強制重啟（不清本機設定）及車輛辨識／蝦殼分析連結；左上角改連 `https://secbeater.com/`。
+- 2026-08-27：匯入改為處理中遮罩、同源 Worker 解析與只渲染目前 view；XLSX 僅在遠傳 Order 時補 raw cell。
+- 2026-08-27：電話投單改為雙欄即時調閱 CSV，可切換使用者資料與即時定位，識別名稱獨立於第三方工具。
