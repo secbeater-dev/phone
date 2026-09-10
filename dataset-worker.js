@@ -1,14 +1,14 @@
 /* All data processing remains inside this same-origin dedicated worker. */
 importScripts(
   './vendor/zip-no-worker-inflate-2.7.57.min.js', './vendor/sax-1.4.1.js',
-  './cdr-model.js?v=20260910-multi-phone-v1', './streaming-xlsx.js?v=20260910-multi-phone-v1',
-  './dataset-store.js?v=20260910-multi-phone-v1', './dataset-report.js?v=20260910-multi-phone-v1'
+  './cdr-model.js?v=20260910-multi-phone-v2', './streaming-xlsx.js?v=20260910-multi-phone-v2',
+  './dataset-store.js?v=20260910-multi-phone-v2', './dataset-report.js?v=20260910-multi-phone-v2'
 );
 let store, queue = Promise.resolve(), legacyLoaded = false, xlsxLoaded = false, pdfLoaded = false;
 const jobs = new Map();
 function legacy() {
   if (!legacyLoaded) {
-    importScripts('./vendor/xlsx.full.min.js', './attachment-export.js?v=20260910-multi-phone-v1', './app.js?v=20260910-multi-phone-v1');
+    importScripts('./vendor/xlsx.full.min.js', './attachment-export.js?v=20260910-multi-phone-v2', './app.js?v=20260910-multi-phone-v2');
     legacyLoaded = true;
   }
 }

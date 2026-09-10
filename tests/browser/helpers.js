@@ -17,12 +17,14 @@ async function start(t, options = {}) {
   const browser = await chromium.launch({ headless: true, channel: process.env.PHONE_BROWSER_CHANNEL || 'msedge', args: options.args || [] });
   t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
+  const requests = [];
+  context.on('request', request => requests.push({ method: request.method(), url: request.url() }));
   const page = await context.newPage();
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto(process.env.PHONE_TEST_URL || `http://127.0.0.1:${server.address().port}/`);
   await page.waitForLoadState('networkidle');
   await page.locator('#noticeDismissButton').click();
-  return { page, context, browser, errors };
+  return { page, context, browser, errors, requests };
 }
 function synthetic(count = 1101) {
   const calls = [['通話類別','始話時間','查詢項目','調閱門號','imei','對象門號','通話期間','開始基地台編號','開始基地台','結束基地台編號','結束基地台']];

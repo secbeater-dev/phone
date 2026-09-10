@@ -1,7 +1,7 @@
 (function (root) {
   'use strict';
   const PREFIX = 'phone-workbench-session-';
-  const VERSION = '20260910-multi-phone-v1';
+  const VERSION = '20260910-multi-phone-v2';
   const abortError = () => new DOMException('已取消處理。', 'AbortError');
   function deleteDatabase(name) {
     return new Promise((resolve, reject) => {
