@@ -18,7 +18,10 @@ async function start(t, options = {}) {
   t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
   const requests = [];
-  context.on('request', request => requests.push({ method: request.method(), url: request.url() }));
+  const requestRows = new WeakMap();
+  context.on('request', request => { const row = { method: request.method(), url: request.url() }; requestRows.set(request, row); requests.push(row); });
+  context.on('requestfailed', request => { const row = requestRows.get(request); if (row) row.failed = request.failure()?.errorText; });
+  context.on('response', response => { const row = requestRows.get(response.request()); if (row) row.status = response.status(); });
   const page = await context.newPage();
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto(process.env.PHONE_TEST_URL || `http://127.0.0.1:${server.address().port}/`);
