@@ -1,0 +1,12 @@
+{
+  "name": "phone-workbench",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:browser": "node --test tests/browser/*.test.js"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "6.2.5",
+    "playwright": "1.62.1"
+  }
+}

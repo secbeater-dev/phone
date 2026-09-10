@@ -1,8 +1,8 @@
 /* Dedicated import worker. Keep identifiers independent of the main UI layer. */
 /* global importScripts, PhoneWorkbench */
 importScripts(
-  "./vendor/xlsx.full.min.js?v=20260827-notice-card-layout-v1",
-  "./app.js?v=20260827-notice-card-layout-v1"
+  "./vendor/xlsx.full.min.js?v=20260910-multi-phone-v1",
+  "./app.js?v=20260910-multi-phone-v1"
 );
 
 self.onmessage = function onImportParserMessage(event) {
@@ -16,7 +16,7 @@ self.onmessage = function onImportParserMessage(event) {
     self.postMessage({
       requestId: requestId,
       ok: false,
-      message: error && error.message ? error.message : "¸ÑªR¥¢±Ñ",
+      message: error && error.message ? error.message : "ï¿½ÑªRï¿½ï¿½ï¿½ï¿½",
     });
   }
 };

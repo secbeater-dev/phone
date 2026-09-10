@@ -17,15 +17,15 @@
     sidebarCollapsed: "phone-workbench-sidebar-collapsed",
   };
   const LOCAL_EXPORT_VERSION = "phone-workbench-local-settings-v1";
-  const RELEASE_ASSET_VERSION = "20260827-notice-card-layout-v1";
+  const RELEASE_ASSET_VERSION = "20260910-multi-phone-v1";
   const CALL_PAGE_SIZE = 500;
   const MULTI_LOCATION_PAGE_SIZE = 500;
   const MULTI_LOCATION_WINDOW_MINUTES = 30;
   const ATTACHMENT_ASSETS = {
-    exceljs: { src: "./vendor/exceljs.min.js?v=20260827-notice-card-layout-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
-    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260827-notice-card-layout-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
-    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260827-notice-card-layout-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
-    fontData: { src: "./vendor/open-huninn-data.js?v=20260827-notice-card-layout-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
+    exceljs: { src: "./vendor/exceljs.min.js?v=20260910-multi-phone-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
+    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260910-multi-phone-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
+    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260910-multi-phone-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
+    fontData: { src: "./vendor/open-huninn-data.js?v=20260910-multi-phone-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
   };
   const loadedAttachmentAssets = new Map();
   const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}-${String(hour + 1).padStart(2, "0")}`);
@@ -43,6 +43,7 @@
   ];
   const VIEW_TITLES = {
     calls: "通聯列表",
+    network: "網路歷程",
     profile: "用戶資料",
     stats: "電話統計",
     multiLocation: "多門號位置",
@@ -152,6 +153,13 @@
     syncTheme();
     syncSidebarCollapsed();
     bindEvents();
+    globalThis.PhoneDatasetUI?.init({
+      getNotes: () => state.phoneNotes,
+      updateNote: updatePhoneNote,
+      setView,
+      setTicketPhones(phones) { $('ticketSourceInput').value = phones.join('\n'); renderTicketLookupView(); },
+      clearLegacy() { state.currentWorkspace = null; state.callRecords = []; state.cases = []; },
+    });
     applyTicketRangeDefaults();
     renderHourTiles();
     renderActiveView();
@@ -389,6 +397,7 @@
   async function handleFileImport(event) {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
+    if (globalThis.PhoneDatasetUI) return globalThis.PhoneDatasetUI.importFiles(files);
     await runBatchedFileImport({
       files,
       statusNode: $("importStatus"),
@@ -408,6 +417,10 @@
   async function handleMultiLocationImport(event) {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
+    if (files.reduce((sum, file) => sum + file.size, 0) > 16 * 1024 * 1024) {
+      $('multiLocationImportStatus').textContent = '多門號位置比對目前限同批 16 MiB；大型多電話工作簿請使用一般資料匯入。';
+      event.target.value = ''; return;
+    }
     await runBatchedFileImport({
       files,
       statusNode: $("multiLocationImportStatus"),
@@ -595,6 +608,10 @@
 
   function renderActiveView() {
     if (typeof document === "undefined") return;
+    if (globalThis.PhoneDatasetUI?.active()) {
+      globalThis.PhoneDatasetUI.render(state.view);
+      if (!["multiLocation", "submission", "export"].includes(state.view)) return;
+    }
     if (state.view === "calls") renderTwoWayCalls();
     else if (state.view === "profile") renderProfileView();
     else if (state.view === "stats") renderStatsView();
@@ -677,6 +694,7 @@
     if (typeof document === "undefined") return;
     const panel = $("dateFilterPanel");
     if (!panel) return;
+    if (globalThis.PhoneDatasetUI?.active()) { panel.hidden = true; return; }
     const hasWorkspace = Boolean(state.currentWorkspace);
     panel.hidden = !hasWorkspace;
     if (!hasWorkspace) return;
@@ -1532,6 +1550,7 @@
   }
 
   function exportWorkspaceJson() {
+    if (globalThis.PhoneDatasetUI?.active()) return globalThis.PhoneDatasetUI.exportJson();
     if (!state.currentWorkspace) {
       $("exportMessage").textContent = "尚未匯入資料。";
       return;
@@ -1543,6 +1562,7 @@
   async function importWorkspaceJson(event) {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (globalThis.PhoneDatasetUI) { await globalThis.PhoneDatasetUI.importFiles([file]); event.target.value = ""; return; }
     try {
       const text = await file.text();
       const payload = JSON.parse(text);
@@ -1614,6 +1634,7 @@
   }
 
   function showAttachmentExportModal() {
+    if (globalThis.PhoneDatasetUI?.active()) return globalThis.PhoneDatasetUI.showExport();
     const modal = $("attachmentExportModal");
     if (!modal) return;
     modal.hidden = false;
@@ -1630,6 +1651,7 @@
   }
 
   async function downloadAttachmentXlsx() {
+    if (globalThis.PhoneDatasetUI?.active()) return globalThis.PhoneDatasetUI.exportAttachments("xlsx");
     const workspace = analysisWorkspace();
     if (!workspace?.records?.length || !AttachmentExport) return;
     setAttachmentExportBusy(true);
@@ -1649,6 +1671,7 @@
   }
 
   async function downloadAttachmentPdf(sectionKey) {
+    if (globalThis.PhoneDatasetUI?.active()) return globalThis.PhoneDatasetUI.exportAttachments("pdf", sectionKey);
     const workspace = analysisWorkspace();
     if (!workspace?.records?.length || !AttachmentExport) return;
     const section = AttachmentExport.PDF_SECTIONS.find((item) => item.key === sectionKey);
@@ -2174,6 +2197,11 @@
       imei: record.imei || "",
       imsi: record.imsi || "",
       external_ip: record.external_ip || "",
+      external_ipv4: record.external_ipv4 || "",
+      external_ipv6: record.external_ipv6 || "",
+      record_kind: record.record_kind || (normalizeDirection(record.direction, record.call_type) === "data" ? "data" : "call"),
+      source_query: record.source_query || "",
+      source_target: record.source_target || "",
       internal_ip: record.internal_ip || "",
       upload_bytes: toInt(record.upload_bytes),
       download_bytes: toInt(record.download_bytes),

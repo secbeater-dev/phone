@@ -534,7 +534,7 @@ test("keeps the existing Taiwan Mobile parser behavior", () => {
   assert.equal(workspace.records[0].direction, "outbound");
 });
 
-const ASSET_VERSION = "20260827-notice-card-layout-v1";
+const ASSET_VERSION = "20260910-multi-phone-v1";
 
 test("builds independent carrier ticket lookup CSV for profile and live location", () => {
   const now = new Date(2026, 7, 27, 8, 25, 12);
@@ -667,7 +667,7 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   assert.match(workerSource, /importScripts\(/);
   assert.match(workerSource, /parseImportFile/);
 
-  for (const relativePath of ["vendor/xlsx.full.min.js", "attachment-export.js", "app.js"]) {
+  for (const relativePath of ["vendor/xlsx.full.min.js", "attachment-export.js", "dataset-client.js", "dataset-ui.js", "app.js"]) {
     const bytes = fs.readFileSync(path.join(root, relativePath));
     const sri = `sha384-${crypto.createHash("sha384").update(bytes).digest("base64")}`;
     assert.match(html, new RegExp(`src="\\./${relativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\?v=${ASSET_VERSION}"[^>]+integrity="${sri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
@@ -701,6 +701,7 @@ test("Pages deploys attachment assets from an explicit file allowlist", () => {
   const ignore = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
   assert.match(workflow, /attachment-export\.js/);
   assert.match(workflow, /import-parser\.js/);
+  for (const asset of ['cdr-model.js', 'streaming-xlsx.js', 'dataset-worker.js', 'dataset-store.js', 'dataset-client.js', 'dataset-ui.js', 'dataset-report.js', 'zip-no-worker-inflate-2.7.57.min.js', 'sax-1.4.1.js', 'zip.js-LICENSE.txt', 'sax-LICENSE.txt']) assert.ok(workflow.includes(asset), `${asset} must be explicitly deployed`);
   assert.match(workflow, /vehicle-id\.jpg/);
   assert.match(workflow, /shrimp-shell\.jpg/);
   assert.doesNotMatch(workflow, /ai-partner\.webp/);

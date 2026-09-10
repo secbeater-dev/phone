@@ -4,7 +4,7 @@
 
 ## 1. 專案定位
 
-Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具。使用者選取的 XLSX/XML 由瀏覽器內的 `FileReader` 讀取後，交由同源 `import-parser.js` Worker（失敗時退回主執行緒）搭配本地 SheetJS 與 `app.js` 處理；附卷由本地 ExcelJS/pdf-lib 產生；沒有後端、API、資料庫、Service Worker 或上傳端點。
+Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具。一般匯入由同源 `dataset-worker.js` 處理：多電話 XLSX 以 ZIP/XML 串流解析，既有小檔以本地 SheetJS／`app.js` 解析，再寫入使用者瀏覽器的工作階段 IndexedDB。列表與統計由 Worker 查詢，附卷在 Worker 分卷產生。沒有後端、伺服器資料庫、Service Worker 或上傳端點。下文保留的既有 parser 與記憶體 workspace 介面主要用於小檔相容、多門號位置及 Node 報表測試；一般大型匯入使用第 5.1 節的新資料流。
 
 功能包括同批多檔合併、通聯列表、用戶資料、電話統計、時間分布、基地台熱點、多門號位置、電話投單，以及附卷 XLSX/PDF、workspace、CSV 與本機設定匯出。
 
@@ -37,12 +37,12 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
    └─ licenses/                 # 第三方程式與字型授權
 ```
 
-專案沒有套件安裝或建置步驟；測試直接使用 Node 與 repository 內固定版本的瀏覽器套件。
+正式網站沒有建置或安裝步驟。開發測試用 `npm ci` 安裝固定版本 fake-indexeddb 與 Playwright；`npm test` 執行 Node 合成測試，`npm run test:browser` 執行瀏覽器測試。新增 `cdr-model.js`、`streaming-xlsx.js`、`dataset-store.js`、`dataset-worker.js`、`dataset-client.js`、`dataset-ui.js`、`dataset-report.js`；vendor 新增 zip.js 2.7.57（無子 Worker、無 WASM）與 SAX 1.4.1 及授權。`scripts/update-assets.js` 正規化 LF 並更新版本及 SRI，修改受雜湊保護的腳本後必須執行。
 
 ## 3. 載入順序
 
 1. `index.html` 建立側欄、七個 view、一般與多門號位置匯入控制、全域日期篩選視窗、熱點縣市篩選視窗、附卷匯出視窗、使用提醒與匯入進度遮罩；提醒只保留本地運行說明、作者 Telegram（連結文字為「作者」）、強制重啟（只更新網頁、不清本機設定），以及車輛辨識／蝦殼分析的站內圖片連結（完整顯示、不裁切）。
-2. 瀏覽器透過固定發布版本查詢字串載入 `styles.css`、`vendor/xlsx.full.min.js`、`attachment-export.js` 與 `app.js`；三個 script 驗證 SHA-384 SRI 後依序執行。版本字串避免舊快取與新版資產衝突。`script-src` 含 `'self'` 與雜湊，讓同源 Worker 的 `importScripts` 可載入解析檔；`worker-src` 為 `'self'`。
+2. 瀏覽器透過固定發布版本載入樣式及 SheetJS、attachment-export、dataset-client、dataset-ui、app 五個帶 SHA-384 SRI 的腳本。版本避免舊快取衝突；CSP `script-src` 含 `'self'` 與雜湊，Worker importScripts 僅載入同源固定路徑，`worker-src` 為 `'self'`。
 3. `app.js` 與 `attachment-export.js` 均以 UMD 包裝，可供瀏覽器及 Node 測試使用。只有使用者按下附卷下載時，`app.js` 才以固定版本路徑與 SRI 延遲載入 ExcelJS，或依序載入 pdf-lib、fontkit 與字型資料。
 4. `DOMContentLoaded` 執行 `init()`，還原偏好、綁定事件並只渲染目前作用中的 view。
 
@@ -62,6 +62,22 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 - `ticketQueryKind`：電話投單用途，`subscriber_profile` 或 `live_location`，只存在記憶體。
 
 ## 5. 匯入與格式判定
+
+### 5.1 多電話與一般匯入（目前預設流程）
+
+`File Blob → ZIP 隨機讀取 → SAX XML → 標準化批次 → IndexedDB → Worker 查詢 → 畫面分頁`。不把整份 XLSX、工作表、sharedStrings 或全部通聯記錄傳到主執行緒。只消費「通聯紀錄」「使用者資料」「網路歷程」，跳過「通聯整合歷程紀錄」。`inspect` 檢查工作簿關聯及最多 80 列／2 MiB 的標題前綴，串流解決必要 shared-string 參照；須符合原始欄位並含「查詢項目」才走新解析器，避免同名的既有電信格式被誤判。其他支援格式最多 16 MiB，既有 XLSX 解壓後所有 ZIP 部件合計另限 64 MiB，仍在 Worker 使用既有 parser，禁止大型主執行緒 fallback。多門號位置維持獨立既有流程，同批限制 16 MiB。
+
+每批最多 1,000 列或 4 MiB，XML 每次餵入 4 KiB，單節點最多 256 KiB、單來源列 2 MiB、metadata 4 MiB；shared strings 落盤，快取 2 MiB、每次索引回應至多 16 個字串。資料集 metadata 保存最大正規化列／用戶列大小，摘要保存最大彙總列大小；讀取據此縮小每批筆數，使資料庫回應受 4 MiB 限制。一般列表每頁最多 500 筆，特寬列自動降低頁容量並明示；不靜默截斷全資料。目標姓名選單僅顯示 80 字預覽，完整內容保留於用戶資料。排序暫存採固定短鍵、4 MiB 寫入批次，分頁只取得記錄識別碼，避免重複備註字串放大記憶體。匯入進度節流約 150 ms 一次。
+
+每筆保留 `record_kind`（call/data）、`source_query`、`source_target`、來源檔／工作表／實體列號、IPv4／IPv6／內網 IP、IMEI／IMSI、標準基地台参照及必要站點。目標依「查詢項目」優先，空白才使用同列調閱門號／用戶帳號；無法識別歸入未辨識目標。用戶資料按 phone 分開，不能用全檔用戶合併欄位覆蓋每筆目標。非空無效時間保留，日期篩選時才排除無合法日期的列。
+
+`dataset-store.js` 提供 dataset/target/kind/time 複合索引、users/targets、temporary strings、磁碟排序索引、磁碟彙總和摘要快取。非時間排序、搜尋、統計都在 Worker 分批掃描；熱點不持有全時刻陣列，明細另行分頁。電話統計只算通聯，時間／基地台可涵蓋通聯及網路。
+
+每檔先寫入 staging；至少一檔成功才採用新批次。全部失敗或取消保留原資料；多檔以有界掃描合併。Worker 序列化重工作，取消匯入／匯出可直接終止 Worker 再重建，恢復時只保留 UI 已確認的資料集，清掉未完成或未採用資料。過期 view 回應不更新新選擇。儲存配額先估算並攔截 QuotaExceededError，錯誤不回傳原始內容。
+
+`dataset-ui.js` 維護目標／日期／頁碼／排序／搜尋／時段／縣市，目標切換同步雙向通聯、網路歷程、用戶、電話排行、時間熱點與附卷；多門號位置不受影響。投單在首次開啟時分頁取得整批不重複電話。匯入與匯出都有取消按鈕，清除本次資料可釋放暫存。尚未匯入時正常顯示空狀態。
+
+以下是既有小檔 parser 的相容流程與欄位規則；一般匯入採用前述 Worker/IndexedDB 儲存，獨立多門號位置仍使用記憶體 workspace。
 
 ```text
 一批 file input
@@ -198,7 +214,17 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 
 ## 8. localStorage
 
-同源 `localStorage` 保存排行模式、24 小時選取、電話備註、通聯欄寬、主題與側欄狀態。全域日期、一般 workspace、多門號位置 workspace/結果/展開狀態與通聯記錄不會自動保存；只有使用者主動匯出才會產生本機下載檔。
+### 工作階段 IndexedDB
+
+每個分頁使用隨機 session ID 與 `phone-workbench-session-` 資料庫前綴；Web Locks 保護仍開啟的分頁。載入時等待清理無持有者的舊資料庫後才允許匯入。關閉分頁／pagehide 盡力刪除，異常關閉的殘留會在下一次啟動清除；BFCache 返回會重新載入。每次重新開啟都重新匯入，不提供工作階段續用。這是使用者目前裝置、目前瀏覽器及網站來源的本機磁碟暫存，不是共用或伺服器資料庫。既有 localStorage 備註／設定另行保留。
+
+### 大型附卷與 JSON
+
+附卷固定匯出所選電話與包含端點的日期範圍，不受搜尋／頁碼／時段／縣市條件影響。Worker 每卷讀取最多 10,000 筆或 16 MiB，逐卷生成、下載後釋放；JSON 每卷最多 8 MiB 記錄，帶 `subjects` 保留各電話用戶資料，所有卷可同批重新匯入。用戶多於記錄分卷時會追加用戶卷，不省略剩餘用戶。
+
+XLSX 增加「網路歷程」，PDF 增加 network。明細卷明確標示只統計本卷，另有完整範圍摘要卷，含全範圍 24 時段、計數、秒數、IMEI、各用戶、基地台／電話完整排行；每頁排行最多 500 項，排名延續，熱點全時刻明細在明細卷。輸出由本機 ExcelJS/pdf-lib 產生，XLSX 與 PDF 套件各自延遲載入。大型匯出需允許瀏覽器多檔下載，取消保留已下載卷。
+
+同源 `localStorage` 保存既有介面偏好、電話備註、主題與側欄狀態；不保存通聯記錄。一般資料僅存上述工作階段 IndexedDB；新介面的日期、頁码、排序、時段、縣市條件及多門號位置 workspace/結果仍在記憶體。只有主動匯出才產生下載檔。
 
 ## 9. 隱私與信任邊界
 
@@ -224,8 +250,8 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 
 1. checkout。
 2. 拒絕 Git 追蹤的 XLSX/XLS/XML/CSV/TSV、私密資料目錄及本機匯出檔。
-3. 使用 Node 22 執行測試。
-4. 以逐檔白名單把 `.nojekyll`、三個 HTML、`app.js`、`attachment-export.js`、`import-parser.js`、`styles.css`、三個圖片，以及固定版本的五個 vendor 程式/字型檔與四份授權檔複製到 `_site`。
+3. 使用 Node 22、`npm ci` 執行完整 Node 測試與 Playwright Chromium 瀏覽器測試。
+4. 逐檔白名單複製原有 HTML／圖片／樣式／腳本，加上第 2 節七個 dataset／串流腳本、zip.js／SAX 與授權。測試、開發套件、文件與私密來源不在發布清單中。
 5. 上傳 `_site` 並部署 Pages。
 
 自訂網域 `phone.secbeater.com` 保留在既有 Pages/Cloudflare 設定。正式站必須驗證 HTTP、資產版本、CSP/SRI、功能及第三方 script 未執行；若 Cloudflare challenge 或 Browser Insights 仍執行或破壞頁面，應停止宣告完成並由站方停用相關功能或改為 DNS-only。
@@ -239,6 +265,8 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 修改前：完整閱讀本文件、確認私密檔在 repository 外、檢查工作樹。修改後：更新本文件、以合成資料測試、以無內容輸出的方式驗證真實檔、檢查 Git index/歷史/部署白名單與網路請求，並新增異動紀錄。
 
 ## 14. 異動紀錄
+
+- 2026-09-10：新增多電話單檔串流匯入、暫存 IndexedDB、按目標／日期查詢通聯與網路歷程、有界分頁／磁碟排序彙總、取消及孤兒工作階段清理、分卷附卷與完整摘要、JSON 用戶資料往返。保留舊格式與獨立多門號位置；新增合成 parser／資料庫／報表／瀏覽器測試、可選本機大檔效能驗證，以及更新 Pages 白名單與 SRI。
 
 - 2026-07-23：依未修改的 `main`（commit `13485b4`）建立基準架構文件。
 - 2026-07-23：新增中華電信地檢新版 XLSX parser、明確方向統計、日期警告及雙基地台解析；移除 Google Analytics/Tellows，加入 CSP/SRI、忽略規則、合成/私密隔離測試與 Pages 白名單部署。

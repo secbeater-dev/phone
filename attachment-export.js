@@ -9,6 +9,7 @@
     { key: "hours", label: "時間分布圖" },
     { key: "hotspots", label: "熱點時間摘要" },
     { key: "calls", label: "通聯列表" },
+    { key: "network", label: "網路歷程" },
     { key: "profile", label: "用戶資料" },
     { key: "stats_count", label: "電話統計-次數版" },
     { key: "stats_seconds", label: "電話統計-秒數版" },
@@ -38,6 +39,7 @@
     addHoursSheet(workbook, report, chartDataUrl);
     addHotspotsSheet(workbook, report);
     addCallsSheet(workbook, report);
+    if (report.network) addNetworkSheet(workbook, report);
     addProfileSheet(workbook, report);
     addStatsSheet(workbook, report, "count", "電話統計-次數版");
     addStatsSheet(workbook, report, "seconds", "電話統計-秒數版");
@@ -84,13 +86,24 @@
     return sheet;
   }
 
+  function networkRows(report) {
+    return (report.network || []).map(row => [row.occurred_at, row.ended_at, row.target_phone, row.duration_seconds, row.external_ipv4 || row.external_ip, row.external_ipv6, row.internal_ip, row.imei, row.imsi, row.base_stations, row.note, `${row.source_file} / ${row.source_sheet} / ${row.row_number}`]);
+  }
+
+  function addNetworkSheet(workbook, report) {
+    const sheet = setupSheet(workbook, report, "網路歷程", 12);
+    sheet.columns = [22,22,16,12,22,34,22,20,20,40,40,40].map(width => ({ width }));
+    writeTable(sheet, 5, ["開始時間","結束時間","目標電話","連線秒數","IPv4","IPv6","內網IP","IMEI","IMSI","基地台","備註","來源"], networkRows(report), { integerColumns: [4], textColumns: [1,2,3,5,6,7,8,9,10,11,12], filter: true });
+    sheet.pageSetup.printTitlesRow = "1:5";
+  }
+
   function addHoursSheet(workbook, report, chartDataUrl) {
     const sheet = setupSheet(workbook, report, "時間分布圖", 10);
     sheet.columns = [
       { width: 14 }, { width: 12 }, { width: 12 }, { width: 34 },
       { width: 3 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 },
     ];
-    const headers = ["時段", "通聯次數", "占比", "視覺比例"];
+    const headers = ["時段", report.network ? "通聯／網路次數" : "通聯次數", "占比", "視覺比例"];
     writeTable(sheet, 5, headers, report.hours.map((item) => [
       item.label,
       item.count,
@@ -110,7 +123,7 @@
       { width: 8 }, { width: 46 }, { width: 12 }, { width: 12 }, { width: 22 }, { width: 22 }, { width: 22 },
     ];
     const summaryRows = report.hotspots.map((item, index) => [
-      index + 1, item.address, item.count, item.percent / 100, item.first_seen, item.last_seen, item.times.length,
+      (item.rank || index + 1 + (report.meta.rank_offset || 0)), item.address, item.count, item.percent / 100, item.first_seen, item.last_seen, item.times.length,
     ]);
     let row = writeTable(sheet, 5, ["排名", "基地台地址", "次數", "占比", "首次時間", "末次時間", "時間明細數"], summaryRows, {
       percentColumns: [4], integerColumns: [1, 3, 7], filter: true,
@@ -188,7 +201,7 @@
       sheet.mergeCells(row, 1, row, 5);
       styleSectionTitle(sheet.getCell(row, 1), title);
       row = writeTable(sheet, row + 1, ["排名", "電話", "備註", "次數", "秒數"], rows.map((item, index) => [
-        index + 1, item.phone, item.note, item.count, item.seconds,
+        (item.rank || index + 1 + (report.meta.rank_offset || 0)), item.phone, item.note, item.count, item.seconds,
       ]), { integerColumns: [1, 4, 5], textColumns: [2, 3] });
     });
     sheet.pageSetup.printArea = `A1:E${Math.max(sheet.rowCount, 6)}`;
@@ -286,6 +299,14 @@
     if (sectionKey === "hours") drawHoursPdf(ctx, report);
     else if (sectionKey === "hotspots") drawHotspotsPdf(ctx, report);
     else if (sectionKey === "calls") drawCallsPdf(ctx, report);
+    else if (sectionKey === "network") {
+      drawPdfSectionTitle(ctx, "網路歷程");
+      drawPdfTable(ctx, ["開始／結束","目標電話","秒數","IP","IMEI／IMSI","基地台／來源"], (report.network || []).map(row => [
+        `${row.occurred_at}\n${row.ended_at}`, row.target_phone, row.duration_seconds,
+        [row.external_ipv4 || row.external_ip,row.external_ipv6,row.internal_ip].filter(Boolean).join("\n"),
+        `${row.imei}\n${row.imsi}`, `${row.base_stations}\n${row.source_file} / ${row.source_sheet} / ${row.row_number}\n${row.note}`,
+      ]), [0.16,0.12,0.06,0.2,0.15,0.31]);
+    }
     else if (sectionKey === "profile") drawProfilePdf(ctx, report);
     else if (sectionKey === "stats_count") drawStatsPdf(ctx, report.stats.count, "電話統計-次數版");
     else if (sectionKey === "stats_seconds") drawStatsPdf(ctx, report.stats.seconds, "電話統計-秒數版");
@@ -346,12 +367,12 @@
     });
     ctx.page.drawLine({ start: { x: ctx.margin, y: chartBottom + 27 }, end: { x: ctx.margin + chartWidth, y: chartBottom + 27 }, thickness: 0.6, color: ctx.line });
     ctx.y = chartBottom - 12;
-    drawPdfTable(ctx, ["時段", "通聯次數", "占比"], report.hours.map((item) => [item.label, item.count, `${item.percent.toFixed(1)}%`]), [0.4, 0.3, 0.3]);
+    drawPdfTable(ctx, ["時段", report.network ? "通聯／網路次數" : "通聯次數", "占比"], report.hours.map((item) => [item.label, item.count, `${item.percent.toFixed(1)}%`]), [0.4, 0.3, 0.3]);
   }
 
   function drawHotspotsPdf(ctx, report) {
     drawPdfTable(ctx, ["排名", "基地台地址", "次數", "占比", "首次時間", "末次時間"], report.hotspots.map((item, index) => [
-      index + 1, item.address, item.count, `${item.percent.toFixed(1)}%`, item.first_seen, item.last_seen,
+      (item.rank || index + 1 + (report.meta.rank_offset || 0)), item.address, item.count, `${item.percent.toFixed(1)}%`, item.first_seen, item.last_seen,
     ]), [0.07, 0.35, 0.08, 0.08, 0.21, 0.21]);
     drawPdfSectionTitle(ctx, "全部發生時間明細");
     const details = [];
@@ -393,7 +414,7 @@
         drawPdfSectionTitle(ctx, sectionTitle);
       } else drawPdfSectionTitle(ctx, sectionTitle);
       drawPdfTable(ctx, ["排名", "電話", "備註", "次數", "秒數"], rows.map((item, rank) => [
-        rank + 1, item.phone, item.note, item.count, item.seconds,
+        (item.rank || rank + 1 + (ctx.meta.rank_offset || 0)), item.phone, item.note, item.count, item.seconds,
       ]), [0.1, 0.22, 0.42, 0.12, 0.14]);
     });
   }

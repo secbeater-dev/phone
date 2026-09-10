@@ -20,3 +20,6 @@ phone-attachment-*.pdf
 _site/
 coverage/
 *.log
+node_modules/
+test-results/
+playwright-report/

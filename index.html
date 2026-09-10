@@ -4,10 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT' 'sha384-M0ruih3I+EYxxDzsj6KERi+BoH6pvIVrbuBzQlxXlNtZaI/PGY6yGgcpl9ojYNAv' 'sha384-kmgs6SMxTvdXlmRVM/t96fJHsSJjMvlz4nFkyj4CWGZqG17xFdTFKfStfwsbdVtB' 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' 'sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn' 'sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'self'; media-src 'none'; manifest-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT' 'sha384-15400o7achiVrXywgO3RTR6MC09CIMqnGUj701AjYevx1UvEXQs+YUPLx9HOVvgY' 'sha384-gX98e3BF0Wcqvl5RUO+PA2n87pzO1wHcPuX35rIZKh5kq+ZJ2fJXg+fJ66lP1oct' 'sha384-+blibGAIIwNlRfj1DJo5tJOKEOS5xNaDerKzBoYKwAMm+X+FBLeNHCPmYBF6PXaw' 'sha384-kbjZQ+KL9GQC277WyzWMmcupNSiyF7eWZ+Zv24hmU4GIXfsi3qMoJYXqw+Nh1s5e' 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' 'sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn' 'sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'self'; media-src 'none'; manifest-src 'none'" />
     <title>通聯資料分析工具</title>
     <link rel="icon" type="image/png" href="./assets/Beater_icon.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260827-notice-card-layout-v1" />
+    <link rel="stylesheet" href="./styles.css?v=20260910-multi-phone-v1" />
   </head>
   <body>
     <div class="app-shell">
@@ -22,6 +22,7 @@
         <nav class="nav-list" aria-label="功能導覽">
           <button class="nav-item active" data-view="hours" type="button"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9"/></svg></span><strong>時間分布圖</strong></button>
           <button class="nav-item" data-view="calls" type="button"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.5 5.5 9 4l3 5-2 1.6a11.3 11.3 0 0 0 3.4 3.4L15 12l5 3-1.5 2.5c-.5.9-1.5 1.4-2.5 1.2C10 17.6 6.4 14 5.3 8c-.2-1 .3-2 1.2-2.5Z"/><path d="M16 5h4v4M20 5l-5 5"/></svg></span><strong>通聯列表</strong></button>
+          <button class="nav-item" data-view="network" type="button"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 8a14 14 0 0 1 18 0M6 12a9 9 0 0 1 12 0M9 16a4 4 0 0 1 6 0"/><circle cx="12" cy="20" r="1"/></svg></span><strong>網路歷程</strong></button>
           <button class="nav-item" data-view="profile" type="button"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 6h10M8 12h10M8 18h10"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg></span><strong>用戶資料</strong></button>
           <button class="nav-item" data-view="stats" type="button"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 19V9"/><path d="M12 19V5"/><path d="M19 19v-7"/><path d="M3 19h18"/></svg></span><strong>電話統計</strong></button>
           <button class="nav-item" data-view="multiLocation" type="button"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8.5 11.5a3.5 3.5 0 1 0-7 0c0 3.5 3.5 6.5 3.5 6.5s3.5-3 3.5-6.5Z"/><circle cx="5" cy="11.5" r="1"/><path d="M22.5 8a5 5 0 1 0-10 0c0 5 5 9 5 9s5-4 5-9Z"/><circle cx="17.5" cy="8" r="1.5"/><path d="M8 20h12"/></svg></span><strong>多門號位置</strong></button>
@@ -361,8 +362,10 @@
         <div class="import-progress-track" aria-hidden="true"><span id="importProgressFill"></span></div>
       </div>
     </section>
-    <script src="./vendor/xlsx.full.min.js?v=20260827-notice-card-layout-v1" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
-    <script src="./attachment-export.js?v=20260827-notice-card-layout-v1" integrity="sha384-M0ruih3I+EYxxDzsj6KERi+BoH6pvIVrbuBzQlxXlNtZaI/PGY6yGgcpl9ojYNAv" crossorigin="anonymous"></script>
-    <script src="./app.js?v=20260827-notice-card-layout-v1" integrity="sha384-kmgs6SMxTvdXlmRVM/t96fJHsSJjMvlz4nFkyj4CWGZqG17xFdTFKfStfwsbdVtB" crossorigin="anonymous"></script>
+    <script src="./vendor/xlsx.full.min.js?v=20260910-multi-phone-v1" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
+    <script src="./attachment-export.js?v=20260910-multi-phone-v1" integrity="sha384-15400o7achiVrXywgO3RTR6MC09CIMqnGUj701AjYevx1UvEXQs+YUPLx9HOVvgY" crossorigin="anonymous"></script>
+    <script src="./dataset-client.js?v=20260910-multi-phone-v1" integrity="sha384-gX98e3BF0Wcqvl5RUO+PA2n87pzO1wHcPuX35rIZKh5kq+ZJ2fJXg+fJ66lP1oct" crossorigin="anonymous"></script>
+    <script src="./dataset-ui.js?v=20260910-multi-phone-v1" integrity="sha384-+blibGAIIwNlRfj1DJo5tJOKEOS5xNaDerKzBoYKwAMm+X+FBLeNHCPmYBF6PXaw" crossorigin="anonymous"></script>
+    <script src="./app.js?v=20260910-multi-phone-v1" integrity="sha384-kbjZQ+KL9GQC277WyzWMmcupNSiyF7eWZ+Zv24hmU4GIXfsi3qMoJYXqw+Nh1s5e" crossorigin="anonymous"></script>
   </body>
 </html>
