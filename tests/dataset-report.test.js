@@ -26,13 +26,30 @@ test('volume report separates network detail and call statistics and declares vo
   assert.match(JSON.stringify(sheet.getSheetValues()),/11:10:00/);
   assert.ok(attachment.PDF_SECTIONS.some(section=>section.key==='network'));
 });
+
+test('legacy volume reports preserve data rows and the original six-sheet export', async () => {
+  const report = api.buildVolume({ records: rows, users: [], metadata: { source_files: ['synthetic.json'], ui_mode: 'legacy' }, summary: { call_count: 1, data_count: 1 }, volume: 1, label: '合成範圍', notes: {} }, app);
+  assert.equal(report.calls.length, 2);
+  assert.ok(!report.network);
+  assert.equal(report.profile.summary['通聯筆數'], 2);
+  assert.equal(report.profile.summary['總秒數'], 630);
+  assert.equal(report.profile.summary['完整範圍通聯筆數'],2);
+  const bytes=await attachment.createAttachmentXlsx(report,ExcelJS),book=new ExcelJS.Workbook();await book.xlsx.load(bytes);
+  assert.equal(book.worksheets.length,6);assert.equal(book.getWorksheet('網路歷程'),undefined);
+});
+
+test('legacy full-scope summaries keep all-record totals and original hotspot percentages',()=>{
+  const summary={call_count:2,data_count:1,call_seconds:30,data_seconds:60,target_count:2,counterparty_count:1,invalid_dates:0,hours:[{hour:10,count:3}],counties:{'臺北市':4},first_seen:'2026-01-01T10:00:00',last_seen:'2026-01-01T10:00:00'};
+  const report=api.buildSummary({summary,metadata:{ui_mode:'legacy'},label:'合成範圍',volume:1,hotspots:[{count:3,address:'合成地址'}],stats:{count:{},seconds:{}}});
+  assert.ok(!report.network);assert.equal(report.profile.summary['通聯筆數'],3);assert.equal(report.profile.summary['總秒數'],90);assert.equal(report.hotspots[0].percent,100);
+});
 test('new record kind and network/source fields survive legacy normalization',()=>{
   const workspace=app.normalizeWorkspace({case:{source_file:'synthetic.xlsx'},records:rows,base_stations:[]});
   assert.equal(workspace.records[1].record_kind,'data');
   assert.equal(workspace.records[1].external_ipv6,'2001:db8::1');
 });
 test('full-scope summary keeps global counts, percentages and rank offsets across volumes', () => {
-  const summary = { call_count: 20, data_count: 10, call_seconds: 600, data_seconds: 100, invalid_dates: 1, first_seen: '2026-01-01T00:00:00', last_seen: '2026-01-02T00:00:00', hours: [{ hour: 0, label: '00-01', count: 29 }], counties: { '臺北市': 30 } };
+  const summary = { call_count: 20, data_count: 10, call_seconds: 600, data_seconds: 100, invalid_dates: 1, first_seen: '2026-01-01T00:00:00', last_seen: '2026-01-02T00:00:00', hours: [{ hour: 0, label: '00-01', count: 29 }], counties: { '臺北市': 60 } };
   const report = api.buildSummary({ summary, metadata: { source_files: ['synthetic.xlsx'] }, label: '合成範圍', volume: 2, users: [], imeis: ['12345'], hotspots: [{ address: '合成地址', count: 15 }], stats: { count: { totalRows: [{ phone: '0900000001', count: 20 }] }, seconds: {} } });
   assert.equal(report.meta.rank_offset, 500);
   assert.equal(report.hours[0].percent, 100);

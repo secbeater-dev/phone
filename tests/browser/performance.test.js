@@ -14,8 +14,8 @@ test('synthetic large and double-size imports keep bounded UI and cancellable ex
     await page.evaluate(()=>{window.__lag=0;let last=performance.now();window.__timer=setInterval(()=>{const now=performance.now();window.__lag=Math.max(window.__lag,now-last-50);last=now;},50);});
     const started=Date.now();
     await page.locator('#fileInput').setInputFiles(filePath);
-    await page.waitForFunction(n=>document.querySelector('#importProgressModal')?.hidden && document.querySelector('#datasetPageInfo')?.textContent.includes(n.toLocaleString()),count,{timeout:600000});
-    assert.equal(await page.locator('#datasetRows tr').count(),500);
+    await page.waitForFunction(n=>document.querySelector('#importProgressModal')?.hidden && document.querySelector('#callPageSummary')?.textContent.includes(n.toLocaleString()),count,{timeout:600000});
+    assert.equal(await page.locator('#callRows tr').count(),500);
     const lag=await page.evaluate(()=>{clearInterval(window.__timer);return Math.round(window.__lag);});
     t.diagnostic(JSON.stringify({syntheticCallRows:count,importSeconds:Math.round((Date.now()-started)/1000),maxUiTimerLagMs:lag}));
   }

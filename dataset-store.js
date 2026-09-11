@@ -118,14 +118,14 @@
     async metadata(id) { return request(this.db.transaction('datasets').objectStore('datasets').get(id)); }
     async begin(id, metadata) {
       const tx = this.db.transaction('datasets', 'readwrite'), done = finished(tx);
-      tx.objectStore('datasets').put({ ...metadata, id, status: 'importing', total_records: 0, call_count: 0, data_count: 0, date_bounds: { start: '', end: '' }, warning_count: 0 });
+      tx.objectStore('datasets').put({ ...metadata, id, status: 'importing', total_records: 0, call_count: 0, data_count: 0, invalid_dates: 0, date_bounds: { start: '', end: '' }, warning_count: 0 });
       await done;
     }
     async finish(id, extra = {}) {
       const meta = await this.metadata(id);
       if (!meta) throw new Error('Dataset not found');
       const tx = this.db.transaction('datasets', 'readwrite'), done = finished(tx);
-      const result = { ...meta, ...extra, id, total_records: meta.total_records, call_count: meta.call_count, data_count: meta.data_count, date_bounds: meta.date_bounds, status: 'ready' };
+      const result = { ...meta, ...extra, id, total_records: meta.total_records, call_count: meta.call_count, data_count: meta.data_count, invalid_dates: meta.invalid_dates, date_bounds: meta.date_bounds, status: 'ready' };
       tx.objectStore('datasets').put(result); await done; return result;
     }
     async appendUsers(id, rows) {
@@ -176,7 +176,7 @@
           const day = normalized.time_key.slice(0, 10);
           if (!meta.date_bounds.start || day < meta.date_bounds.start) meta.date_bounds.start = day;
           if (!meta.date_bounds.end || day > meta.date_bounds.end) meta.date_bounds.end = day;
-        } else meta.warning_count++;
+        } else { meta.warning_count++; meta.invalid_dates++; }
       }
       targets.forEach(value => targetsStore.put(value));
       tx.objectStore('datasets').put(meta);
@@ -300,8 +300,9 @@
       const queryKey = groupKey(scope);
       const cached = await request(this.db.transaction('summaries').objectStore('summaries').get(queryKey));
       if (cached) return cached;
+      const metadata = await this.metadata(scope.datasetId), legacy = metadata?.ui_mode === 'legacy';
       await this.deleteRange('aggregates', prefixRange([queryKey]));
-      const summary = { queryKey, call_count: 0, data_count: 0, call_seconds: 0, data_seconds: 0, invalid_dates: 0, first_seen: '', last_seen: '', hours: Array.from({ length: 24 }, (_, hour) => ({ hour, label: String(hour).padStart(2, '0') + '-' + String(hour + 1).padStart(2, '0'), count: 0, call_count: 0, data_count: 0 })), counties: {} };
+      const summary = { queryKey, call_count: 0, data_count: 0, call_seconds: 0, data_seconds: 0, total_duration_seconds: 0, target_count: 0, counterparty_count: 0, invalid_dates: 0, first_seen: '', last_seen: '', hours: Array.from({ length: 24 }, (_, hour) => ({ hour, label: String(hour).padStart(2, '0') + '-' + String(hour + 1).padStart(2, '0'), count: 0, call_count: 0, data_count: 0 })), counties: {} };
       await this.scan(scope, async rows => {
         const groups = new Map();
         function add(group, key, seconds = 0, extra = {}) {
@@ -315,6 +316,7 @@
         for (const row of rows) {
           const kind = row.record_kind, seconds = Number(row.duration_seconds || 0);
           summary[kind + '_count']++; summary[kind + '_seconds'] += seconds;
+          summary.total_duration_seconds += seconds;
           if (!row.time_key) summary.invalid_dates++;
           else {
             const h = summary.hours[Number(row.time_key.slice(11, 13))]; h.count++; h[kind + '_count']++;
@@ -322,8 +324,10 @@
             if (!summary.last_seen || row.time_key > summary.last_seen) summary.last_seen = row.time_key;
           }
           if (row.imei) add('imei', row.imei);
+          if (row.target_phone) add('phone:target', row.target_phone);
+          if (row.counterparty_phone) add('phone:counterparty', row.counterparty_phone);
           for (const phone of new Set([row.target_phone, row.counterparty_phone].filter(Boolean))) add('phone:submission', phone);
-          if (kind === 'call') {
+          if (kind === 'call' || legacy) {
             if (row.target_phone) add('phone:total', row.target_phone, seconds, { role: '目標' });
             if (row.counterparty_phone) {
               add('phone:total', row.counterparty_phone, seconds, { role: '對象' });
@@ -353,17 +357,60 @@
         await done; onProgress?.({ stage: '統計中', processedRows: summary.call_count + summary.data_count });
       }, { signal });
       check(signal);
+      const aggregateIndex = this.db.transaction('aggregates').objectStore('aggregates').index('rank_count');
+      summary.target_count = await request(aggregateIndex.count(prefixRange([queryKey, 'phone:target'])));
+      summary.counterparty_count = await request(this.db.transaction('aggregates').objectStore('aggregates').index('rank_count').count(prefixRange([queryKey, 'phone:counterparty'])));
+      check(signal);
       const tx = this.db.transaction('summaries', 'readwrite'), done = finished(tx); tx.objectStore('summaries').put(summary); await done;
       return summary;
     }
     async aggregatePage(queryKey, group, { page = 1, pageSize = PAGE, mode = 'count', search = '', counties } = {}) {
       const summary = await request(this.db.transaction('summaries').objectStore('summaries').get(queryKey));
       pageSize = Math.max(1, Math.min(PAGE, pageSize, Math.floor(READ_BYTES / (summary?.max_aggregate_bytes || READ_BYTES))));
-      const index = mode === 'seconds' ? 'rank_seconds' : 'rank_count', range = prefixRange([queryKey, group]);
+      const index = mode === 'key' ? null : mode === 'seconds' ? 'rank_seconds' : 'rank_count', range = prefixRange([queryKey, group]);
+      const source = () => { const store=this.db.transaction('aggregates').objectStore('aggregates'); return index ? store.index(index) : store; };
       const predicate = search || counties ? row => (!search || String(row.address || row.key).toLowerCase().includes(search.toLowerCase())) && (!counties || counties.includes(row.county)) : null;
-      const total = predicate ? 0 : await request(this.db.transaction('aggregates').objectStore('aggregates').index(index).count(range));
-      const result = await cursorPage(this.db.transaction('aggregates').objectStore('aggregates').index(index), range, (page - 1) * Math.min(PAGE, pageSize), Math.min(PAGE, pageSize), 'next', predicate);
+      const total = predicate ? 0 : await request(source().count(range));
+      const result = await cursorPage(source(), range, (page - 1) * Math.min(PAGE, pageSize), Math.min(PAGE, pageSize), 'next', predicate);
       return { rows: result.rows, total: predicate ? result.total : total, page, pageSize: Math.min(PAGE, pageSize) };
+    }
+    async hotspotPage(scope, options = {}, settings = {}) {
+      const summary = await this.summarize(scope, settings), search = String(options.search || '').trim().toLowerCase();
+      if (!search) return this.aggregatePage(summary.queryKey, 'hotspot', options);
+      const fingerprint = JSON.stringify([summary.queryKey, search]), query = 'hotspot-search';
+      if (this.hotspotSearch !== fingerprint) {
+        this.hotspotSearch = '';
+        await this.deleteRange('aggregates', prefixRange([query]));
+        const limit = Math.max(1, Math.min(PAGE, Math.floor(READ_BYTES / (summary.max_aggregate_bytes || READ_BYTES))));
+        const save = async rows => {
+          check(settings.signal);
+          const tx = this.db.transaction('aggregates', 'readwrite'), done = finished(tx);
+          rows.forEach(row=>tx.objectStore('aggregates').put({...row,query})); await done;
+        };
+        // Copy complete matching aggregates; matching an occurrence must not shrink its counts.
+        for (let page = 1; ; page++) {
+          check(settings.signal);
+          const result = await this.aggregatePage(summary.queryKey, 'hotspot', {page,pageSize:limit});
+          await save(result.rows.filter(row=>[row.address,row.first_seen,row.last_seen].some(value=>String(value || '').toLowerCase().includes(search))));
+          if (page * result.pageSize >= result.total) break;
+        }
+        await this.scan(scope, async rows => {
+          const keys = new Set();
+          for (const row of rows) if (String(row.occurred_at || '').toLowerCase().includes(search)) for (const [key] of stationAddresses(row)) keys.add(key);
+          const ordered = [...keys];
+          for (let index=0;index<ordered.length;index+=limit) {
+            check(settings.signal);
+            const tx=this.db.transaction('aggregates'), source=tx.objectStore('aggregates');
+            const matches=await Promise.all(ordered.slice(index,index+limit).map(key=>request(source.get([summary.queryKey,'hotspot',key]))));
+            await save(matches.filter(Boolean));
+          }
+        }, {signal:settings.signal});
+        check(settings.signal);
+        const tx=this.db.transaction('summaries','readwrite'),done=finished(tx);
+        tx.objectStore('summaries').put({...summary,queryKey:query}); await done;
+        this.hotspotSearch=fingerprint;
+      }
+      return this.aggregatePage(query,'hotspot',{...options,search:''});
     }
     async deleteRange(name, range, index) {
       const tx = this.db.transaction(name, 'readwrite'), done = finished(tx);
@@ -381,7 +428,7 @@
       const tx = this.db.transaction(['datasets', 'sorts', 'aggregates', 'summaries'], 'readwrite'), done = finished(tx);
       tx.objectStore('datasets').delete(id);
       for (const name of ['sorts', 'aggregates', 'summaries']) tx.objectStore(name).clear();
-      this.sortQuery = ''; await done;
+      this.sortQuery = ''; this.hotspotSearch = ''; await done;
     }
     async discardIncomplete() {
       const rows = await request(this.db.transaction('datasets').objectStore('datasets').getAll());

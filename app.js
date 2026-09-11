@@ -17,15 +17,15 @@
     sidebarCollapsed: "phone-workbench-sidebar-collapsed",
   };
   const LOCAL_EXPORT_VERSION = "phone-workbench-local-settings-v1";
-  const RELEASE_ASSET_VERSION = "20260910-multi-phone-v2";
+  const RELEASE_ASSET_VERSION = "20260911-legacy-ui-v1";
   const CALL_PAGE_SIZE = 500;
   const MULTI_LOCATION_PAGE_SIZE = 500;
   const MULTI_LOCATION_WINDOW_MINUTES = 30;
   const ATTACHMENT_ASSETS = {
-    exceljs: { src: "./vendor/exceljs.min.js?v=20260910-multi-phone-v2", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
-    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260910-multi-phone-v2", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
-    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260910-multi-phone-v2", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
-    fontData: { src: "./vendor/open-huninn-data.js?v=20260910-multi-phone-v2", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
+    exceljs: { src: "./vendor/exceljs.min.js?v=20260911-legacy-ui-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
+    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260911-legacy-ui-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
+    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260911-legacy-ui-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
+    fontData: { src: "./vendor/open-huninn-data.js?v=20260911-legacy-ui-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
   };
   const loadedAttachmentAssets = new Map();
   const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}-${String(hour + 1).padStart(2, "0")}`);
@@ -61,6 +61,7 @@
   const COMPACT_HEADERS = ["時間", "通話秒數", "調閱號碼", "IMEI", "通話類別", "基地台", "迄基地台"];
   const FET_WEB_HEADERS = ["啟始時間", "通聯時間(秒)", "結束時間", "上行用量", "下行用量", "全部用量", "基地台 ID", "最終基地台 ID", "基地台位址", "最終基地台位址", "上網IPv4", "上網IPv6", "IMEI", "IMSI", "MSISDN", "備註"];
   const TWM_CALL_PIG_HEADERS = ["通話類別", "始話時間", "調閱門號", "對象門號", "通話期間", "開始基地台編號", "開始基地台"];
+  const TWM_FLAT_HEADERS = ['查詢日期','文號','電信業者','電話號碼','始話日期時間','通話時間','通話類別','目標電話','對象電話','順序','基地台編號','基地台位置'];
   const CHT_PROSECUTOR_HEADERS = ["CDR類別", "主叫號碼", "查詢狀態", "受叫號碼", "始話日期時間", "通話秒數", "IMEI", "指定轉接", "起始基地台-地址/終止基地台-地址"];
   const FET_PROSECUTOR_CALL_HEADERS = ["始話時間", "通話秒數", "調閱號碼", "IMEI", "通話類別", "通話對象", "轉接電話", "基地台/交換機", "備註"];
   const FET_PROSECUTOR_METADATA_KEYS = new Set(["文號", "查詢日期", "電信業者", "通聯類別", "查詢狀態", "區段時間", "備註", "電話號碼"]);
@@ -159,6 +160,21 @@
       setView,
       setTicketPhones(phones) { $('ticketSourceInput').value = phones.join('\n'); renderTicketLookupView(); },
       clearLegacy() { state.currentWorkspace = null; state.callRecords = []; state.cases = []; },
+      readAnalysis() { return { page: state.callPage, sort: { ...state.callSort }, rank: state.phoneStatsRankMode, date: { ...state.dateRange }, hours: [...state.appliedHourSelection], counties: [...state.hotspotCountySelection] }; },
+      setCallPage(page) { state.callPage = page; },
+      setDatasetDate(date) { state.dateRange = { ...state.dateRangeBounds, ...date }; state.callPage = 1; },
+      adoptDataset(metadata) {
+        state.currentWorkspace = null; state.callRecords = []; state.cases = [];
+        state.callPage = 1; state.callSort = { column: 'occurred_at', direction: 'asc' };
+        state.dateRangeBounds = metadata?.date_bounds || { start: '', end: '' };
+        state.dateRange = { ...state.dateRangeBounds, active: false }; state.dateRangeDraft = { ...state.dateRangeBounds };
+        state.hotspotCountySelection = new Set(ALL_COUNTY_FILTER_KEYS); state.hotspotCountyDraft = new Set(ALL_COUNTY_FILTER_KEYS);
+        state.expandedHotspotAddress = ''; $('recordSearch').value = ''; $('hourHotspotSearch').value = '';
+        $('ticketSourceInput').value = ''; renderTicketLookupView();
+        syncHotspotCountyFilterButton(); syncDateFilterPanel();
+      },
+      renderCallPagination, applyCallColumnWidths, metricCard, statsCard, renderHourBuckets, formatPercent,
+      syncDateFilterPanel,
     });
     applyTicketRangeDefaults();
     renderHourTiles();
@@ -337,6 +353,7 @@
 
   function setView(view) {
     if (!VIEW_TITLES[view]) view = "hours";
+    if (view === 'network' && !globalThis.PhoneDatasetUI?.multi()) view = 'hours';
     state.view = view;
     document.querySelectorAll(".view").forEach((section) => section.classList.remove("active-view"));
     $(`${view}View`)?.classList.add("active-view");
@@ -694,16 +711,16 @@
     if (typeof document === "undefined") return;
     const panel = $("dateFilterPanel");
     if (!panel) return;
-    if (globalThis.PhoneDatasetUI?.active()) { panel.hidden = true; return; }
-    const hasWorkspace = Boolean(state.currentWorkspace);
-    panel.hidden = !hasWorkspace;
+    const hasDataset = globalThis.PhoneDatasetUI?.active();
+    const hasWorkspace = Boolean(state.currentWorkspace) || hasDataset;
+    panel.hidden = !hasWorkspace || globalThis.PhoneDatasetUI?.multi() || state.view === 'multiLocation';
     if (!hasWorkspace) return;
     const hasBounds = Boolean(state.dateRangeBounds.start && state.dateRangeBounds.end);
     const button = $("dateFilterButton");
     if (button) button.disabled = !hasBounds;
     let label = hasBounds ? `${state.dateRangeBounds.start} 至 ${state.dateRangeBounds.end}` : "沒有可解析日期";
     if (state.dateRange.active) {
-      const excluded = invalidDateRecordCount(state.callRecords);
+      const excluded = hasDataset ? globalThis.PhoneDatasetUI.invalidDates() : invalidDateRecordCount(state.callRecords);
       label = `${state.dateRange.start} 至 ${state.dateRange.end}${excluded ? `；排除 ${excluded.toLocaleString()} 筆日期異常資料` : ""}`;
     }
     if ($("dateFilterSummary")) $("dateFilterSummary").textContent = label;
@@ -716,7 +733,7 @@
 
   function showDateFilterModal() {
     const modal = $("dateFilterModal");
-    if (!modal || !state.currentWorkspace || !state.dateRangeBounds.start || !state.dateRangeBounds.end) return;
+    if (!modal || (!state.currentWorkspace && !globalThis.PhoneDatasetUI?.active()) || !state.dateRangeBounds.start || !state.dateRangeBounds.end) return;
     state.dateRangeDraft = {
       start: state.dateRange.active ? state.dateRange.start : state.dateRangeBounds.start,
       end: state.dateRange.active ? state.dateRange.end : state.dateRangeBounds.end,
@@ -828,6 +845,7 @@
   }
 
   function renderTwoWayCalls() {
+    if (globalThis.PhoneDatasetUI?.active()) return globalThis.PhoneDatasetUI.render('calls');
     const query = ($("recordSearch")?.value || "").trim().toLowerCase();
     const rows = sortedCallRecords().filter((record) => {
       if (!query) return true;
@@ -999,6 +1017,7 @@
   }
 
   function renderProfileView() {
+    if (globalThis.PhoneDatasetUI?.active()) return globalThis.PhoneDatasetUI.render('profile');
     renderProfileSummaryCards();
     const subject = state.currentWorkspace?.case?.subject || {};
     const entries = Object.entries(subject);
@@ -1025,6 +1044,7 @@
   }
 
   function renderStatsView() {
+    if (globalThis.PhoneDatasetUI?.active()) return globalThis.PhoneDatasetUI.render('stats');
     const stats = computePhoneStats(analysisRecords(), state.phoneStatsRankMode);
     $("statsContent").innerHTML = [
       statsCard("來電排行", stats.inboundRows),
@@ -1132,7 +1152,7 @@
         ? `<div class="stats-table" role="table">
             <div class="stats-table-row stats-table-head" role="row"><span>#</span><span>電話</span><span>備註(只存瀏覽器)</span><span>次數</span><span>秒數</span></div>
             ${rows.map((row, index) => `<div class="stats-table-row" role="row">
-              <span>${index + 1}</span>
+              <span>${row.rank || index + 1}</span>
               <span><span class="phone-value">${escapeHtml(row.phone)}</span></span>
               <span><input class="phone-note-input" data-phone-note="${escapeHtml(row.phone)}" value="${escapeHtml(phoneNote(row.phone))}" aria-label="備註(只存瀏覽器) ${escapeHtml(row.phone)}" /></span>
               <span>${row.count}</span>
@@ -1224,8 +1244,14 @@
   }
 
   function renderHoursView() {
+    if (globalThis.PhoneDatasetUI?.active()) return globalThis.PhoneDatasetUI.render('hours');
     const records = filteredHourRecords();
     const buckets = computeHourBuckets(records);
+    renderHourBuckets(buckets);
+    renderHourHotspots(records);
+  }
+
+  function renderHourBuckets(buckets) {
     const max = Math.max(1, ...buckets.map((item) => item.count));
     const total = buckets.reduce((sum, item) => sum + item.count, 0);
     $("hourChart").className = "hour-chart hour-chart-vertical";
@@ -1241,7 +1267,6 @@
         <div class="hour-label-full">${item.label}</div>
       </div>`;
     }).join("");
-    renderHourHotspots(records);
   }
 
   function filteredHourRecords() {
@@ -1253,6 +1278,7 @@
   }
 
   function renderHourHotspots(records) {
+    if (globalThis.PhoneDatasetUI?.active()) return globalThis.PhoneDatasetUI.render('hours');
     const query = ($("hourHotspotSearch")?.value || "").trim().toLowerCase();
     const hotspots = computeAddressHotspots(records, analysisWorkspace()?.base_stations || []);
     const countyFiltered = hotspots.filter((item) => state.hotspotCountySelection.has(classifyTaiwanCounty(item.address)));
@@ -1301,7 +1327,7 @@
     const list = $("hotspotCountyFilterList");
     if (!list) return;
     const hotspots = computeAddressHotspots(filteredHourRecords(), analysisWorkspace()?.base_stations || []);
-    const rows = computeTaiwanCountyStats(hotspots);
+    const rows = globalThis.PhoneDatasetUI?.active() ? globalThis.PhoneDatasetUI.countyRows(ALL_COUNTY_FILTER_KEYS) : computeTaiwanCountyStats(hotspots);
     list.innerHTML = rows.map((row) => `<label class="county-filter-row">
       <span class="county-filter-name"><input type="checkbox" data-county-filter="${escapeHtml(row.county)}" ${state.hotspotCountyDraft.has(row.county) ? "checked" : ""} /><span>${escapeHtml(row.county)}</span></span>
       <span class="county-filter-count">${row.count.toLocaleString()}</span>
@@ -1819,6 +1845,14 @@
     if (chtProsecutor) return parseChtProsecutor(fileName, sheets, chtProsecutor);
     const fetProsecutorCall = fetProsecutorCallHeaders(sheets);
     if (fetProsecutorCall) return parseFetProsecutorCall(fileName, sheets, fetProsecutorCall);
+    const flatHeaders = sheets.map(sheet=>findHeaderInSheet(sheet,TWM_FLAT_HEADERS,80)).filter(Boolean);
+    if (flatHeaders.length) {
+      for (const header of flatHeaders) {
+        const rawRows=XLSX.utils.sheet_to_json(workbook.Sheets[header.sheet.title],{header:1,defval:'',raw:true,blankrows:false});
+        header.sheet.rows.forEach((row,index)=>{ row.rawValues=rawRows[index] || row.values; });
+      }
+      return parseTwmFlatXlsx(fileName,flatHeaders);
+    }
     const converted = convertedMultiSheetHeaders(sheets);
     if (converted) return parseConvertedMultiSheet(fileName, sheets, converted);
     const twmCallPig = twmCallPigHeaders(sheets);
@@ -1835,6 +1869,37 @@
     if (detected.sourceFormat === "taiwan_mobile_call") return parseTwm(fileName, sheet.title, sheet.rows, detected);
     if (detected.sourceFormat === "taiwan_mobile_data_session") return parseTwmDataSession(fileName, sheet.title, sheet.rows, detected);
     throw new Error("找不到支援的標題列");
+  }
+
+  function parseTwmFlatXlsx(fileName, headers) {
+    const parsed=makeParsed({fileName,carrier:'台灣大哥大',sourceFormat:'taiwan_mobile_flat_call_xlsx',sheetName:headers.map(h=>h.sheet.title).join('、'),headerRow:headers[0].rowNumber,totalSourceRows:headers.reduce((sum,h)=>sum+h.sheet.rows.length,0),subject:{}});
+    const subjects=new Map(),stations=new Map();
+    const metadataKeys=['查詢日期','文號','電信業者','查詢狀態','備註','通聯類別','開始時間','結束時間','電話號碼','電話種類','用戶基本資料組'];
+    for (const header of headers) {
+      let previous=null,previousKey='',previousSequence=0;
+      for (const row of header.sheet.rows) {
+        if(row.rowNumber<=header.rowNumber || !row.values.some(cellText)) continue;
+        if(hasHeaders(row.values,TWM_FLAT_HEADERS)) { previous=null; continue; }
+        const data=rowDict(header.headers,row.rawValues || row.values);
+        mergeSubjectMetadata(subjects,Object.fromEntries(metadataKeys.map(key=>[key,data[key]])));
+        const rawTime=cellText(data['始話日期時間']);
+        if(!rawTime && !data['目標電話'] && !data['對象電話'] && !data['通話類別']) continue;
+        const occurred=normalizeDatetime(rawTime);
+        if(rawTime && !occurred) parsed.warnings.push(`第 ${row.rowNumber} 列的通聯時間無法正規化，已保留原文。`);
+        const sequence=Number(data['順序']) || 0;
+        const key=JSON.stringify(header.headers.filter(k=>!['順序','基地台編號','基地台位置'].includes(k)).map(k=>data[k]));
+        let record;
+        if(previous && key===previousKey && sequence>1 && sequence>previousSequence) record=previous;
+        else {
+          record=baseRecord({row_number:row.rowNumber,source_sheet:header.sheet.title,occurred_at:occurred || rawTime,duration_seconds:toInt(data['通話時間']),call_type:cellText(data['通話類別']),direction:directionLabel(data['通話類別']),target_phone:normalizePhoneText(data['目標電話'] || data['電話號碼']),counterparty_phone:normalizePhoneText(data['對象電話']),imei:exactNumericText(data.IMEI),note:[cellText(data['備註5']),data['轉接資訊組']?`轉接資訊：${cellText(data['轉接資訊組'])}`:''].filter(Boolean).join('；')});
+          parsed.records.push(record);
+        }
+        addStationRef(record,stations,'primary',exactNumericText(data['基地台編號']),cellText(data['基地台位置']));
+        previous=record;previousKey=key;previousSequence=sequence;
+      }
+    }
+    parsed.subject=subjectFromValueSets(subjects);parsed.carrier=parsed.subject['電信業者'] || parsed.carrier;
+    parsed.base_stations=[...stations.values()]; return parsed;
   }
 
   function parseChtProsecutor(fileName, sheets, header) {

@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const root = path.resolve(__dirname, '..');
-const version = '20260910-multi-phone-v2';
+const version = '20260911-legacy-ui-v1';
 const scripts = ['vendor/xlsx.full.min.js', 'attachment-export.js', 'dataset-client.js', 'dataset-ui.js', 'app.js'];
 // Git checks these assets out as LF; hash those exact bytes on Windows too.
 for (const name of fs.readdirSync(root).filter(name => /\.(js|css|html)$/.test(name))) {

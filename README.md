@@ -9,7 +9,8 @@ This GitHub Pages build runs fully in the browser. Imported files are parsed loc
 ## Features
 
 - Import one multi-phone workbook containing `通聯紀錄`, `使用者資料`, and/or `網路歷程`. The derived `通聯整合歷程紀錄` sheet is excluded to prevent duplicates.
-- Search/select a target phone and switch between calls, network history, profile, statistics and time/hotspot analysis. Target and inclusive dates also scope attachment exports.
+- Empty pages and legacy formats retain the original workbench interface. Legacy batches analyze every imported target and use the sidebar date dialog. Only successfully imported original multi-phone workbooks show target controls, network history and network PDF. Mixed batches use this mode when any successful source is an original multi-phone workbook.
+- In multi-phone mode, search/select a target and switch between calls, network history, profile, statistics and time/hotspot analysis. Target and inclusive dates also scope attachment exports. JSON volumes preserve the source format and interface mode; older unmarked JSON uses the legacy interface.
 - Stream ZIP/XML and shared strings to temporary local storage. Reads and writes are bounded by bytes; lists show up to 500 rows per page. Import/export can be cancelled without replacing the previous dataset.
 - Every page visit starts empty. Explicit clear removes imported data; closing a tab attempts cleanup, and next startup removes orphan sessions. Other active tabs stay isolated. Browser notes/settings remain until separately cleared.
 - Export sequential attachment detail volumes (up to 10,000 records / 16 MiB each), plus separate full-scope summary volumes. Network XLSX/PDF and reimportable JSON volumes are included. Allow multiple downloads and keep all volumes.
@@ -17,6 +18,7 @@ This GitHub Pages build runs fully in the browser. Imported files are parsed loc
 - Supports the Chunghwa Telecom prosecutor-office XLSX layout with whitespace-normalized headers.
 - Supports the Far EasTone prosecutor-office call XLSX layout, including repeated query sections and spacer-column variants.
 - Supports Far EasTone Order `QueryInfo` / `CDRInfo` XLSX and XML layouts, including raw Excel dates/identifiers and UTF-8, Big5, or UTF-16 XML decoding.
+- Supports Taiwan Mobile XML flattened into XLSX, preserving station continuation rows, raw numeric IMEI and query metadata.
 - Merge every successfully parsed file selected in one import batch, retain each record's source, and replace the current batch only after a new batch has at least one success.
 - Review the complete call list with 500-row pagination, subject metadata, time distribution, phone statistics, and a two-pane carrier ticket CSV builder for subscriber-profile or live-location queries.
 - Filter hotspot addresses by any combination of Taiwan's 22 current counties/cities plus an unrecognized-address category; 台 and 臺 are classified together, with bulk select and clear controls.
@@ -47,6 +49,10 @@ node scripts/update-assets.js
 ```
 
 On Windows, browser tests default to installed Edge. `PHONE_TEST_URL` points the synthetic browser suite at a deployment. The private large-file test is opt-in with `PRIVATE_MULTI_XLSX`, stays on the local test origin, emits only pass/fail and performance metrics, and saves no source data or screenshots. Never set both variables for a private-file test.
+
+`PRIVATE_COMPAT_DIR` enables recursive local compatibility verification of XLSX/XML and XML extracted from ZIP archives into an isolated OS temporary folder outside the repository. The verifier checks original parser parity, every list page, profiles, complete rankings, hour/hotspot data and query controls, plus batch merging. Output contains only anonymous file ordinals and stage pass/fail. XSL is a display template; the application does not accept ZIP imports.
+
+`PHONE_VISUAL_BASELINE=1` compares empty and synthetic populated pages against `b922521` on desktop/mobile, light/dark and collapsed sidebars. `PHONE_PERF=1` exercises 100,000 and 200,000 synthetic records and export cancellation. Optional private and visual tests are skipped in CI.
 
 ## Privacy
 

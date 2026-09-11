@@ -7,12 +7,11 @@
   let bridge;
   function init(api) {
     bridge = api;
-    state.enabled = true;
     const toolbar = document.createElement('section');
     toolbar.id = 'datasetToolbar'; toolbar.className = 'panel dataset-toolbar'; toolbar.hidden = true;
     toolbar.innerHTML = `<div class="dataset-target-group"><label for="datasetTargetSearch">目標電話</label><input id="datasetTargetSearch" type="search" placeholder="搜尋電話或用戶名稱" autocomplete="off"><select id="datasetTarget" aria-label="選擇目標電話"></select><div class="dataset-target-pages"><button type="button" id="datasetTargetPrev" class="ghost-button compact-action">上一組</button><small id="datasetTargetCount"></small><button type="button" id="datasetTargetNext" class="ghost-button compact-action">下一組</button></div></div><div class="dataset-date-group"><label for="datasetStart">起始日期</label><input id="datasetStart" type="date"><label for="datasetEnd">結束日期</label><input id="datasetEnd" type="date"><button id="datasetDateApply" class="secondary-button" type="button">套用日期</button><button id="datasetDateReset" class="ghost-button" type="button">完整日期</button></div><div class="dataset-scope-line"><strong id="datasetScope"></strong><button id="datasetClear" class="ghost-button" type="button">清除本次資料</button></div><p id="datasetStatus" class="message" role="status" aria-live="polite"></p>`;
     document.querySelector('.topbar').after(toolbar);
-    const section = document.createElement('section'); section.id = 'datasetView'; section.className = 'view';
+    const section = document.createElement('section'); section.id = 'networkView'; section.className = 'view';
     section.innerHTML = '<section class="panel"><div id="datasetContent"></div></section>';
     document.querySelector('.workspace').append(section);
     const cancel = document.createElement('button'); cancel.id = 'datasetImportCancel'; cancel.type = 'button'; cancel.className = 'secondary-button'; cancel.textContent = '取消匯入';
@@ -23,14 +22,20 @@
     $('datasetTargetSearch').addEventListener('input', () => { clearTimeout(targetTimer); targetTimer = setTimeout(() => { state.targetPage = 1; loadTargets(false).catch(failure); }, 250); });
     $('datasetTargetPrev').addEventListener('click', () => { state.targetPage--; loadTargets(false).catch(failure); });
     $('datasetTargetNext').addEventListener('click', () => { state.targetPage++; loadTargets(false).catch(failure); });
-    $('datasetTarget').addEventListener('change', () => { state.target = $('datasetTarget').value; state.page = 1; state.search = ''; render(state.view); });
+    $('datasetTarget').addEventListener('change', () => { state.target = $('datasetTarget').value; resetPage(); render(state.view); });
     $('datasetDateApply').addEventListener('click', () => {
       const start = $('datasetStart').value, end = $('datasetEnd').value;
       if (!start || !end || start > end) { status('請設定有效日期，起始日期不可晚於結束日期。', true); return; }
-      state.date = { active: true, start, end }; state.page = 1; render(state.view);
+      bridge.setDatasetDate({ active: true, start, end }); resetPage(); render(state.view);
     });
-    $('datasetDateReset').addEventListener('click', () => { state.date = { active: false }; fillDates(); state.page = 1; render(state.view); });
+    $('datasetDateReset').addEventListener('click', () => { bridge.setDatasetDate({ active: false }); fillDates(); resetPage(); render(state.view); });
     $('datasetContent').addEventListener('click', click);
+    for (const [view, container] of [['profile', 'profileView'], ['stats', 'statsView'], ['hours', 'hoursView']]) {
+      const pages = document.createElement('div'); pages.id = `dataset-${view}-pages`; pages.hidden = true;
+      $(container).querySelector('.panel').append(pages); pages.addEventListener('click', click);
+    }
+    $('hourHotspotContent').addEventListener('click', hotspotClick);
+    $('hourHotspotContent').addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); hotspotClick(event); } });
     $('datasetContent').addEventListener('change', event => {
       if (event.target.id === 'datasetRankMode') { state.mode = event.target.value; state.page = 1; render(state.view); }
     });
@@ -44,7 +49,7 @@
     });
     document.querySelector('.workspace').addEventListener('dragover', event => { if (event.dataTransfer?.types.includes('Files')) event.preventDefault(); });
     document.querySelector('.workspace').addEventListener('drop', event => { if (event.dataTransfer?.files.length) { event.preventDefault(); importFiles([...event.dataTransfer.files]); } });
-    const pdf = document.createElement('button'); pdf.type = 'button'; pdf.className = 'secondary-button'; pdf.dataset.attachmentPdf = 'network'; pdf.textContent = '網路歷程 PDF';
+    const pdf = document.createElement('button'); pdf.type = 'button'; pdf.className = 'secondary-button'; pdf.dataset.attachmentPdf = 'network'; pdf.textContent = '網路歷程 PDF'; pdf.hidden = true;
     pdf.addEventListener('click', () => exportAttachments('pdf', 'network'));
     document.querySelector('.attachment-pdf-grid').append(pdf);
     const exportCancel = document.createElement('button'); exportCancel.id = 'datasetExportCancel'; exportCancel.type = 'button'; exportCancel.className = 'ghost-button'; exportCancel.textContent = '取消匯出'; exportCancel.hidden = true;
@@ -57,7 +62,15 @@
     client().catch(failure);
   }
   function status(message, danger = false) { if ($('datasetStatus')) { $('datasetStatus').textContent = message; $('datasetStatus').classList.toggle('danger-text', danger); } }
-  function failure(error) { if (error?.name !== 'AbortError') status(error.message || '處理失敗，請重新匯入。', true); }
+  function failure(error) { if (error?.name !== 'AbortError') { const message = error.message || '處理失敗，請重新匯入。'; status(message, true); if (!multi()) $('importStatus').textContent = message; } }
+  function multi() { return state.dataset?.ui_mode === 'multi'; }
+  function resetPage() { state.page = 1; state.search = ''; state.hotspot = ''; bridge.setCallPage(1); $('recordSearch').value = ''; }
+  function syncMode() {
+    document.querySelector('[data-view="network"]').hidden = !multi();
+    document.querySelector('[data-attachment-pdf="network"]').hidden = !multi();
+    $('datasetToolbar').hidden = !multi() || ['multiLocation', 'submission'].includes(state.view);
+    bridge.syncDateFilterPanel();
+  }
   async function client() {
     if (state.client) return state.client;
     if (!state.starting) state.starting = root.PhoneDatasetClient.create({ onProgress(progress) {
@@ -72,7 +85,7 @@
   }
   async function importFiles(files) {
     if (!files?.length || state.busy || state.exporting) return;
-    state.busy = true; state.enabled = true; $('datasetToolbar').hidden = false;
+    state.busy = true;
     state.importCancelled = false;
     $('importProgressModal').hidden = false; $('datasetImportCancel').hidden = false;
     $('importProgressStage').textContent = '準備匯入'; $('importProgressDetail').textContent = '檢查檔案與本機暫存空間。';
@@ -81,11 +94,14 @@
       const service = await client(); service.cancel('view');
       if (state.importCancelled) throw new DOMException('已取消', 'AbortError');
       const result = await service.request('importBatch', { files }, { channel: 'import' });
+      const targets = result.dataset.ui_mode === 'multi' ? await service.request('targets', { datasetId: result.dataset.id, options: { page: 1 } }, { channel: 'import' }) : null;
       const old = state.dataset;
       state.dataset = result.dataset; state.page = 1; state.targetPage = 1; state.search = ''; state.date = { active: false }; state.hours = null; state.counties = null;
       service.activate(state.dataset.id);
       state.sort = { column: 'occurred_at', direction: 'asc' }; $('datasetTargetSearch').value = '';
-      bridge.clearLegacy(); fillDates(); await loadTargets(true);
+      bridge.adoptDataset(state.dataset); state.hotSummary = null; state.summary = null; state.target = '';
+      fillDates(); if (targets) showTargets(targets, true); else $('datasetTarget').innerHTML = '';
+      syncMode();
       $('importResults').innerHTML = result.results.map(r => `<div class="import-result-item ${r.ok ? '' : 'danger-text'}"><strong>${esc(r.fileName)}</strong><span>${r.ok ? '完成' : esc(r.message)}</span></div>`).join('');
       $('importStatus').textContent = `匯入完成：通聯 ${number(state.dataset.call_count)} 筆，網路 ${number(state.dataset.data_count)} 筆。`;
       if (old) await service.request('remove', { datasetId: old.id });
@@ -100,6 +116,9 @@
     const revision = (state.targetRevision || 0) + 1; state.targetRevision = revision;
     const result = await state.client.request('targets', { datasetId: state.dataset.id, options: { search: $('datasetTargetSearch').value, page: state.targetPage } });
     if (revision !== state.targetRevision) return;
+    showTargets(result, selectFirst);
+  }
+  function showTargets(result, selectFirst) {
     const options = result.rows.map(row => `<option value="${esc(row.phone)}">${esc(row.phone || '未辨識目標')}${row.names?.length ? ' · ' + esc(row.names.join('、')) : ''}｜通聯 ${number(row.call_count)} · 網路 ${number(row.data_count)}</option>`);
     if (selectFirst) state.target = result.rows.find(row => row.call_count + row.data_count > 0)?.phone ?? result.rows[0]?.phone ?? '';
     if (!result.rows.some(row => row.phone === state.target)) options.unshift(`<option value="${esc(state.target)}">${esc(state.target || '未辨識目標')}（目前選取）</option>`);
@@ -108,70 +127,96 @@
     $('datasetTargetPrev').disabled = state.targetPage <= 1;
     $('datasetTargetNext').disabled = state.targetPage * 500 >= result.total;
   }
-  function scope(kind) { return { datasetId: state.dataset.id, target: state.target, kind, date: { ...state.date } }; }
-  function scopeLabel() { return `${state.target || '未辨識目標'} · ${state.date.active ? `${state.date.start} 至 ${state.date.end}` : '完整日期'}`; }
+  function scope(kind) { return { datasetId: state.dataset.id, ...(multi() ? { target: state.target } : {}), kind, date: bridge.readAnalysis().date }; }
+  function scopeLabel() { const date = bridge.readAnalysis().date; return `${multi() ? state.target || '未辨識目標' : '完整匯入資料'} · ${date.active ? `${date.start} 至 ${date.end}` : '完整日期'}`; }
   const note = phone => phone ? `<input class="phone-note-input" data-phone-note="${esc(phone)}" aria-label="電話備註 ${esc(phone)}" value="${esc(bridge.getNotes()[phone] || '')}">` : '';
   function pager(total, page = state.page, pageSize = 500, label = '') {
     return `<div class="dataset-pagination"><span id="datasetPageInfo">${label || `共 ${number(total)} 筆`} · 第 ${page} / ${Math.max(1, Math.ceil(total / pageSize))} 頁${label ? '' : ` · 每頁 ${pageSize} 筆`}</span><div><button type="button" class="ghost-button" data-dataset-page="prev" ${page <= 1 ? 'disabled' : ''}>上一頁</button><button type="button" class="secondary-button" data-dataset-page="next" ${page * pageSize >= total ? 'disabled' : ''}>下一頁</button></div></div>`;
   }
-  function searchBox(placeholder) { return `<input id="datasetSearch" class="dataset-search" type="search" placeholder="${esc(placeholder)}" value="${esc(state.search)}">`; }
+  function searchBox(placeholder) { return `<input id="datasetSearch" class="search-input dataset-search" type="search" placeholder="${esc(placeholder)}" value="${esc(state.search)}">`; }
   function table(headers, rows, id = 'datasetRows') { return `<div class="table-wrap dataset-table-wrap"><table class="${headers.length >= 8 ? 'dataset-record-table' : ''}"><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody id="${id}">${rows.map(cells => `<tr>${cells.map(v => `<td>${v}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`; }
   function heading(title, detail = '') { return `<div class="section-title"><div><h2>${esc(title)}</h2><p class="muted">${esc(detail)}</p></div></div>`; }
   function metrics(summary) { return `<div class="summary-grid">${[['通聯筆數', summary.call_count], ['網路歷程', summary.data_count], ['通話總秒數', summary.call_seconds], ['日期異常', summary.invalid_dates]].map(([k, v]) => `<div class="metric-card"><span>${k}</span><strong>${number(v)}</strong></div>`).join('')}</div>`; }
-  async function render(view, preserveSearch = false) {
-    if (state.view !== view) { state.page = 1; state.search = ''; state.sort = { column: 'occurred_at', direction: 'asc' }; }
-    state.view = view;
-    if (!state.enabled) return false;
-    $('datasetToolbar').hidden = ['multiLocation', 'submission'].includes(view);
-    $('dateFilterPanel').hidden = true;
+  function setPages(view, total, pageSize, label) {
+    const node = $(`dataset-${view}-pages`);
+    node.hidden = total <= pageSize;
+    node.innerHTML = node.hidden ? '' : pager(total, state.page, pageSize, label);
+  }
+  function countyRows(keys) {
+    const counts = state.hotSummary?.counties || {}, total = Object.values(counts).reduce((sum, n) => sum + n, 0);
+    return keys.map(county => ({ county, count: counts[county] || 0, percent: total ? (counts[county] || 0) * 100 / total : 0 }));
+  }
+  function callRow(row) {
+    const extra = [row.external_ip, row.note].filter(Boolean).join('；');
+    const details = multi() ? `<details class="record-details"><summary>完整資訊</summary><dl class="detail-list">${[['IMSI',row.imsi],['IPv4',row.external_ipv4],['IPv6',row.external_ipv6],['內網 IP',row.internal_ip],['基地台',(row.stations || []).map(s=>s.address || s.cell_id).join('；')],['來源位置',`${row.source_sheet || ''} / 第 ${row.row_number || ''} 列`]].filter(([,v])=>v).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></details>` : '';
+    return `<tr><td>${esc(row.source_file || '')}</td><td>${esc(row.occurred_at)}</td><td>${esc(row.call_type)}</td><td><span class="phone-value">${esc(row.target_phone)}</span></td><td>${note(row.target_phone)}</td><td><span class="phone-value">${esc(row.counterparty_phone)}</span></td><td>${note(row.counterparty_phone)}</td><td>${esc(row.duration_seconds ?? '')}</td><td>${esc(row.imei)}</td><td>${esc(extra)}${details}</td></tr>`;
+  }
+  async function render(view) {
+    if (!state.dataset) return false;
+    const changed = state.view !== view;
+    if (changed) { state.page = 1; state.search = ''; state.hotspot = ''; state.sort = { column: 'occurred_at', direction: 'asc' }; }
+    state.view = view; syncMode();
+    const revision = ++state.revision; state.client.cancel('view');
     if (['multiLocation', 'submission', 'export'].includes(view)) {
-      $('datasetView').classList.remove('active-view');
-      if (view === 'submission' && state.dataset && state.ticketDataset !== state.dataset.id) prefillTickets().catch(failure);
+      if (view === 'submission' && state.ticketDataset !== state.dataset.id) prefillTickets().catch(failure);
       return false;
     }
-    document.querySelectorAll('.view').forEach(node => node.classList.remove('active-view')); $('datasetView').classList.add('active-view');
-    const revision = ++state.revision; state.client?.cancel('view');
-    if (!state.dataset) { $('datasetContent').innerHTML = heading('尚未匯入資料', '選擇一份多電話 Excel，即可切換通聯與網路歷程。') + '<table><tbody id="datasetRows"></tbody></table>'; return true; }
     $('datasetScope').textContent = scopeLabel();
-    const content = $('datasetContent'); content.setAttribute('aria-busy', 'true');
-    if (!preserveSearch) content.innerHTML = heading('載入中…', scopeLabel());
-    const query = (op, payload) => state.client.request(op, payload, { channel: 'view' });
+    const content = $(`${view}View`); if (!content) return false;
+    content.setAttribute('aria-busy', 'true');
+    const filters = bridge.readAnalysis(), queryScope = scope();
+    const filterKey = JSON.stringify([queryScope,filters.hours,filters.counties,filters.rank,$('hourHotspotSearch').value]);
+    if (filterKey !== state.filterKey) { state.page = 1; state.hotspot = ''; state.filterKey = filterKey; }
+    const query = async (op, payload) => {
+      if (revision !== state.revision) throw new DOMException('已取消', 'AbortError');
+      const result = await state.client.request(op, payload, { channel: 'view' });
+      if (revision !== state.revision) throw new DOMException('已取消', 'AbortError');
+      return result;
+    };
     try {
-      let html;
-      if (view === 'calls' || view === 'network') {
-        const kind = view === 'network' ? 'data' : 'call';
-        const result = await query('page', { scope: scope(kind), options: { page: state.page, search: state.search, sort: state.sort, notes: bridge.getNotes() } });
-        const cols = kind === 'call' ? [['occurred_at','時間'],['call_type','類型'],['target_phone','目標電話'],['target_note','目標備註'],['counterparty_phone','對象電話'],['counterparty_note','對象備註'],['duration_seconds','秒數'],['imei','IMEI'],['imsi','IMSI'],['external_ip','外部 IP'],['internal_ip','內網 IP'],['stations','基地台'],['note','備註'],['source_file','來源']] : [['occurred_at','開始時間'],['ended_at','結束時間'],['target_phone','目標電話'],['duration_seconds','連線秒數'],['external_ipv4','IPv4'],['external_ipv6','IPv6'],['internal_ip','內網 IP'],['imei','IMEI'],['imsi','IMSI'],['stations','基地台'],['note','備註'],['source_file','來源']];
-        html = heading(kind === 'call' ? '雙向通聯' : '網路歷程', scopeLabel()) + searchBox('搜尋時間、電話、IMEI、IP、備註或來源') + pager(result.total, state.page, result.pageSize) + table(cols.map(([key, label]) => key === 'stations' ? label : `<button class="dataset-sort" data-dataset-sort="${key}" type="button">${label}${state.sort.column === key ? state.sort.direction === 'asc' ? ' ↑' : ' ↓' : ''}</button>`), result.rows.map(row => cols.map(([key]) => key === 'target_note' ? note(row.target_phone) : key === 'counterparty_note' ? note(row.counterparty_phone) : key === 'source_file' ? esc(`${row.source_file || ''} / ${row.source_sheet || ''} / 第 ${row.row_number || ''} 列`) : key === 'stations' ? esc((row.stations || []).map(s => s.address || s.cell_id).join('；')) : esc(row[key] ?? ''))));
+      if (view === 'calls') {
+        const result = await query('page', { scope: { ...queryScope, kind: multi() ? 'call' : undefined }, options: { page: filters.page, search: $('recordSearch').value, sort: filters.sort, notes: bridge.getNotes() } });
+        $('callRows').innerHTML = result.rows.length ? result.rows.map(callRow).join('') : '<tr><td colspan="10">尚無符合資料。</td></tr>';
+        bridge.renderCallPagination(result.total, (filters.page - 1) * result.pageSize, result.rows.length, Math.max(1, Math.ceil(result.total / result.pageSize)));
+        bridge.applyCallColumnWidths();
+      } else if (view === 'network') {
+        const result = await query('page', { scope: { ...queryScope, kind: 'data' }, options: { page: state.page, search: state.search, sort: state.sort, notes: bridge.getNotes() } });
+        const cols = [['occurred_at','開始時間'],['ended_at','結束時間'],['target_phone','目標電話'],['duration_seconds','連線秒數'],['external_ipv4','IPv4'],['external_ipv6','IPv6'],['internal_ip','內網 IP'],['imei','IMEI'],['imsi','IMSI'],['stations','基地台'],['note','備註'],['source_file','來源']];
+        const focused = document.activeElement?.id === 'datasetSearch', cursor = $('datasetSearch')?.selectionStart;
+        $('datasetContent').innerHTML = heading('網路歷程') + searchBox('搜尋時間、電話、IMEI、IP、備註或來源') + table(cols.map(([key,label])=>key==='stations'?label:`<button class="table-sort-button" data-dataset-sort="${key}" type="button">${label}</button>`),result.rows.map(row=>cols.map(([key])=>key==='stations'?esc((row.stations || []).map(s=>s.address || s.cell_id).join('；')):key==='source_file'?esc(`${row.source_file || ''} / ${row.source_sheet || ''} / 第 ${row.row_number || ''} 列`):esc(row[key] ?? '')))) + pager(result.total,state.page,result.pageSize);
+        if (focused) { $('datasetSearch').focus(); if (cursor != null) $('datasetSearch').setSelectionRange(cursor,cursor); }
       } else if (view === 'profile') {
-        const summary = await query('summary', { scope: scope() });
-        const users = await query('users', { scope: scope(), options: { page: state.page } });
-        const imeis = await query('aggregate', { queryKey: summary.queryKey, group: 'imei', options: { page: state.page } });
-        html = heading('用戶資料', scopeLabel()) + metrics(summary) + `<p>第一筆：${esc(summary.first_seen || '—')}　最後一筆：${esc(summary.last_seen || '—')}</p>` + table(['資料來源','欄位','內容'], users.rows.flatMap(row => Object.entries(row.subject || {}).map(([key, value]) => [esc(`${row.source_sheet || ''} / ${row.row_number || ''}`), esc(key), esc(value)])), 'datasetUsers') + '<h3>IMEI</h3>' + table(['IMEI','出現筆數'], imeis.rows.map(row => [esc(row.key), number(row.count)]), 'datasetImeis') + pager(Math.max(Math.ceil(users.total / users.pageSize), Math.ceil(imeis.total / imeis.pageSize)), state.page, 1, `用戶 ${number(users.total)} 筆／IMEI ${number(imeis.total)} 項`);
+        const summary = await query('summary', { scope: queryScope });
+        const users = await query('users', { scope: queryScope, options: { page: state.page } });
+        const imeis = await query('aggregate', { queryKey: summary.queryKey, group: 'imei', options: { page: state.page, mode: 'key' } });
+        state.summary = summary;
+        $('profileSummaryCards').innerHTML = [['通聯筆數',summary.call_count + summary.data_count],['目標電話',summary.target_count],['對象電話',summary.counterparty_count],['第一筆時間',summary.first_seen || '-'],['最後時間',summary.last_seen || '-'],['總秒數',summary.call_seconds + summary.data_seconds]].map(([label,value])=>bridge.metricCard(label,value ?? 0)).join('');
+        const subjects = new Map();
+        for (const row of users.rows) for (const [key,value] of Object.entries(row.subject || {})) { const values = subjects.get(key) || new Set(); for(const item of String(value ?? '').split('、').map(v=>v.trim()).filter(Boolean)) values.add(item); if(values.size) subjects.set(key,values); }
+        $('profileContent').innerHTML = subjects.size ? [...subjects].map(([key,values])=>`<dt>${esc(key)}</dt><dd>${esc([...values].join('、'))}</dd>`).join('') : '<dt>狀態</dt><dd>尚無用戶資料。</dd>';
+        $('profileImeiList').innerHTML = imeis.rows.length ? imeis.rows.map(row=>`<span class="imei-chip">${esc(row.key)}</span>`).join('') : '<p class="muted">尚無 IMEI 資料。</p>';
+        setPages('profile',Math.max(Math.ceil(users.total/users.pageSize),Math.ceil(imeis.total/imeis.pageSize)),1,`用戶 ${number(users.total)} 筆／IMEI ${number(imeis.total)} 項`);
       } else if (view === 'stats') {
-        const summary = await query('summary', { scope: scope() });
-        const groups = [];
-        for (const [key, label] of [['phone:inbound','來電／收訊'],['phone:outbound','去電／發訊'],['phone:total','全部電話']]) {
-          const result = await query('aggregate', { queryKey: summary.queryKey, group: key, options: { page: state.page, mode: state.mode } });
-          groups.push({ label, ...result });
+        const summary = await query('summary', { scope: queryScope }), groups = [];
+        for (const [key,label] of [['phone:inbound','來電排行'],['phone:outbound','去電排行'],['phone:total','完整排行']]) {
+          const result = await query('aggregate', { queryKey: summary.queryKey, group: key, options: { page: state.page, mode: filters.rank } }); groups.push({label,...result});
         }
-        html = heading('電話統計', '依所選電話與日期統計通聯；網路連線不計入通話。') + `<label>排序 <select id="datasetRankMode"><option value="count" ${state.mode === 'count' ? 'selected' : ''}>次數</option><option value="seconds" ${state.mode === 'seconds' ? 'selected' : ''}>秒數</option></select></label>` + groups.map(group => `<h3>${group.label} · ${number(group.total)} 個電話</h3>` + table(['電話','次數','秒數','備註'], group.rows.map(row => [esc(row.key), number(row.count), number(row.seconds), note(row.key)]), `dataset${group.label}`)).join('') + pager(Math.max(...groups.map(g => Math.ceil(g.total / g.pageSize))), state.page, 1, '完整電話排行');
-      } else {
-        const summary = await query('summary', { scope: scope() });
-        const hotSummary = state.hours ? await query('summary', { scope: { ...scope(), hours: state.hours } }) : summary;
-        const hotspots = await query('aggregate', { queryKey: hotSummary.queryKey, group: 'hotspot', options: { page: state.page, search: state.search, counties: state.counties } });
-        const max = Math.max(1, ...summary.hours.map(h => h.count));
-        const chart = summary.hours.map(h => `<button type="button" class="dataset-hour ${!state.hours || state.hours.includes(h.hour) ? 'selected' : ''}" data-dataset-hour="${h.hour}" aria-pressed="${!state.hours || state.hours.includes(h.hour)}"><span>${number(h.count)}</span><i style="height:${Math.round(80 * h.count / max)}px"></i><small>${String(h.hour).padStart(2, '0')}</small></button>`).join('');
-        html = heading('時間分布與基地台熱點', '以通聯及網路歷程的起始時間計算；點選時段可篩選熱點。') + metrics(summary) + `<div class="dataset-hours">${chart}</div><button class="ghost-button" data-dataset-hour="all" type="button">全部時段</button><div class="dataset-counties">${Object.entries(hotSummary.counties).map(([county, count]) => `<label><input type="checkbox" data-county="${esc(county)}" ${!state.counties || state.counties.includes(county) ? 'checked' : ''}>${esc(county)} ${number(count)}</label>`).join('')}<button type="button" data-county-action="all" class="ghost-button">全選</button><button type="button" data-county-action="clear" class="ghost-button">全部取消</button><button type="button" data-county-action="apply" class="secondary-button">套用縣市</button></div>` + searchBox('搜尋基地台地址') + pager(hotspots.total, state.page, hotspots.pageSize) + table(['基地台地址','次數','首次時間','末次時間','明細'], hotspots.rows.map(row => [esc(row.address), number(row.count), esc(row.first_seen), esc(row.last_seen), `<button type="button" class="ghost-button" data-hotspot="${esc(row.key)}">查看</button>`]));
+        $('statsContent').innerHTML = groups.map(group=>bridge.statsCard(group.label,group.rows.map((row,index)=>({...row,phone:row.key,rank:(state.page-1)*group.pageSize+index+1})))).join('');
+        setPages('stats',Math.max(...groups.map(g=>Math.ceil(g.total/g.pageSize))),1,'完整電話排行');
+      } else if (view === 'hours') {
+        const summary = await query('summary', { scope: { ...queryScope, hours: filters.hours } });
+        const hotspots = await query('hotspots', { scope: { ...queryScope, hours: filters.hours }, options:{page:state.page,pageSize:20,search:$('hourHotspotSearch').value,counties:filters.counties} });
+        state.hotSummary = summary;
+        bridge.renderHourBuckets(summary.hours);
+        const total = summary.call_count + summary.data_count;
+        $('hourHotspotContent').innerHTML = hotspots.rows.length ? hotspots.rows.map(row=>`<div class="hotspot-item" data-hotspot-address="${esc(row.key)}" role="button" tabindex="0" aria-expanded="false"><strong>${esc(row.address)}</strong><span>${row.count} 筆 / ${bridge.formatPercent(total ? 100*row.count/total : 0)}</span><small>${esc(row.first_seen || '-')} 至 ${esc(row.last_seen || '-')}</small></div>`).join('') : '<p class="muted">尚無符合資料。</p>';
+        setPages('hours',hotspots.total,hotspots.pageSize);
       }
-      if (revision !== state.revision) return true;
-      const cursor = preserveSearch ? $('datasetSearch')?.selectionStart : null;
-      content.innerHTML = html;
-      if (preserveSearch) { $('datasetSearch')?.focus(); if (cursor != null) try { $('datasetSearch').setSelectionRange(cursor, cursor); } catch (_) {} }
     } catch (error) { if (revision === state.revision) failure(error); }
-    finally { if (revision === state.revision) content.setAttribute('aria-busy', 'false'); }
+    finally { if (revision === state.revision) { content.setAttribute('aria-busy', 'false'); bridge.syncDateFilterPanel(); } }
     return true;
   }
+
   async function prefillTickets() {
     const id = state.dataset.id;
     if (state.ticketLoading === id) return;
@@ -191,29 +236,34 @@
     const button = event.target.closest('button'); if (!button || !state.dataset) return;
     if (button.dataset.datasetPage) { state.page += button.dataset.datasetPage === 'next' ? 1 : -1; render(state.view); }
     if (button.dataset.datasetSort) { const column = button.dataset.datasetSort; state.sort = { column, direction: state.sort.column === column && state.sort.direction === 'asc' ? 'desc' : 'asc' }; state.page = 1; render(state.view); }
-    if (button.dataset.datasetHour) {
-      const hour = button.dataset.datasetHour;
-      if (hour === 'all') state.hours = null;
-      else if (!state.hours) state.hours = [Number(hour)];
-      else state.hours = state.hours.includes(Number(hour)) ? state.hours.filter(h => h !== Number(hour)) : [...state.hours, Number(hour)].sort((a, b) => a - b);
-      state.page = 1; render(state.view);
-    }
-    if (button.dataset.countyAction) {
-      if (button.dataset.countyAction === 'apply') { state.counties = [...document.querySelectorAll('[data-county]:checked')].map(node => node.dataset.county); state.page = 1; render(state.view); }
-      else document.querySelectorAll('[data-county]').forEach(node => node.checked = button.dataset.countyAction === 'all');
-    }
-    if (button.dataset.hotspot) showHotspot(button.dataset.hotspot, 1).catch(failure);
-    if (button.dataset.hotspotPage) showHotspot(state.hotspot, Number(button.dataset.hotspotPage)).catch(failure);
+  }
+  function hotspotClick(event) {
+    if (!state.dataset || state.view !== 'hours') return;
+    const pageButton = event.target.closest('[data-hotspot-page]');
+    if (pageButton) { showHotspot(state.hotspot,Number(pageButton.dataset.hotspotPage)).catch(failure); return; }
+    if (event.target.closest('.hotspot-times')) return;
+    const item = event.target.closest('[data-hotspot-address]'); if (!item) return;
+    if (state.hotspot === item.dataset.hotspotAddress) { state.hotspot = ''; ++state.detailRevision; item.classList.remove('expanded'); item.setAttribute('aria-expanded','false'); item.querySelector('.hotspot-times')?.remove(); item.querySelector('.hotspot-detail-pagination')?.remove(); }
+    else showHotspot(item.dataset.hotspotAddress,1).catch(failure);
   }
   async function showHotspot(address, page) {
     state.hotspot = address;
-    const revision = state.revision;
-    const result = await state.client.request('page', { scope: { ...scope(), hours: state.hours }, options: { address, page } }, { channel: 'view' });
-    if (revision !== state.revision) return;
-    $('datasetHotspotDetail')?.remove();
-    const node = document.createElement('section'); node.id = 'datasetHotspotDetail';
-    node.innerHTML = `<h3>基地台來源明細</h3>` + table(['時間','類型','目標','來源'], result.rows.map(r => [esc(r.occurred_at), esc(r.record_kind === 'data' ? '網路' : r.call_type), esc(r.target_phone), esc(`${r.source_sheet} / 第 ${r.row_number} 列`)]), 'datasetHotspotRows') + `<p>共 ${number(result.total)} 筆 · 第 ${page} 頁 <button class="ghost-button" data-hotspot-page="${page - 1}" ${page === 1 ? 'disabled' : ''}>上一頁</button><button class="ghost-button" data-hotspot-page="${page + 1}" ${page * result.pageSize >= result.total ? 'disabled' : ''}>下一頁</button></p>`;
-    $('datasetContent').append(node);
+    const revision = state.revision, detailRevision = state.detailRevision = (state.detailRevision || 0) + 1;
+    const result = await state.client.request('page', { scope: { ...scope(), hours: bridge.readAnalysis().hours }, options: { address, page } }, { channel: 'view' });
+    if (revision !== state.revision || detailRevision !== state.detailRevision || address !== state.hotspot) return;
+    for (const item of $('hourHotspotContent').querySelectorAll('[data-hotspot-address]')) {
+      item.querySelector('.hotspot-times')?.remove(); item.querySelector('.hotspot-detail-pagination')?.remove(); const expanded = item.dataset.hotspotAddress === address;
+      item.classList.toggle('expanded',expanded); item.setAttribute('aria-expanded',String(expanded));
+      if (!expanded) continue;
+      const node = document.createElement('ol'); node.className = 'hotspot-times'; node.id = 'datasetHotspotRows';
+      node.innerHTML = result.rows.map(r=>`<li>${esc(r.occurred_at)}${multi()?` · ${esc(r.record_kind==='data'?'網路':r.call_type)} · ${esc(r.target_phone)} · ${esc(r.source_sheet)} / 第 ${esc(r.row_number)} 列`:''}</li>`).join('');
+      item.append(node);
+      item.querySelector('.hotspot-detail-pagination')?.remove();
+      if(result.total > result.pageSize) {
+        const pages=document.createElement('p');pages.className='hotspot-detail-pagination';
+        pages.innerHTML=`共 ${number(result.total)} 筆 · 第 ${page} 頁 <button class="secondary-button compact-action" data-hotspot-page="${page - 1}" ${page===1?'disabled':''}>上一頁</button><button class="secondary-button compact-action" data-hotspot-page="${page + 1}" ${page*result.pageSize>=result.total?'disabled':''}>下一頁</button>`;item.append(pages);
+      }
+    }
   }
   async function clear() {
     if (state.busy || state.exporting) return;
@@ -222,13 +272,16 @@
       if (state.dataset) await state.client.request('remove', { datasetId: state.dataset.id });
       state.dataset = null; state.target = ''; $('datasetTarget').innerHTML = ''; $('datasetScope').textContent = '';
       state.client?.activate(null);
+      bridge.adoptDataset(null); state.summary = null; state.hotSummary = null;
+      document.querySelectorAll('.view').forEach(node=>node.removeAttribute('aria-busy'));
+      for (const view of ['profile','stats','hours']) { const node=$(`dataset-${view}-pages`); node.innerHTML=''; node.hidden=true; }
+      $('datasetContent').innerHTML = ''; syncMode();
       $('importResults').innerHTML = ''; $('importStatus').textContent = '本次匯入資料已清除。'; fillDates();
-      status('已清除本次資料；電話備註與介面設定仍保留。'); render(state.view);
+      status('已清除本次資料；電話備註與介面設定仍保留。'); bridge.setView('hours');
     } catch (error) { failure(error); }
   }
   function showExport() {
     $('attachmentExportModal').hidden = false;
-    $('attachmentXlsxButton').textContent = '下載 XLSX（大型資料自動分卷）';
     $('attachmentExportStatus').textContent = state.dataset ? `匯出範圍：${scopeLabel()}。每卷最多 10,000 筆，另附完整摘要。請允許此網站下載多個檔案並保留所有分卷。` : '尚未匯入資料。';
     document.querySelectorAll('#attachmentXlsxButton,[data-attachment-pdf]').forEach(button => button.disabled = !state.dataset || state.exporting);
   }
@@ -290,5 +343,5 @@
     } catch (error) { $('exportMessage').textContent = error.message; }
     finally { state.exporting = false; $('datasetJsonCancel').hidden = true; }
   }
-  root.PhoneDatasetUI = { init, active: () => state.enabled, render, importFiles, clear, showExport, exportAttachments, exportJson };
+  root.PhoneDatasetUI = { init, active: () => Boolean(state.dataset), multi, invalidDates: () => state.dataset?.invalid_dates || 0, countyRows, render, importFiles, clear, showExport, exportAttachments, exportJson };
 })(globalThis);

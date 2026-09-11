@@ -4,6 +4,23 @@ require('fake-indexeddb/auto');
 let api = {};
 try { api = require('../dataset-store.js'); } catch (error) { if (error.code !== 'MODULE_NOT_FOUND') throw error; }
 
+test('legacy ranks data records and finds middle hotspot times without reducing counts',async t=>{
+  const store=await api.open('legacy-search-'+crypto.randomUUID()); t.after(()=>store.destroy());
+  await store.begin('legacy',{ui_mode:'legacy'});
+  await store.appendRecords('legacy',['2026-01-01T10:00:00','2026-01-02T11:00:00','2026-01-03T12:00:00','invalid'].map(occurred_at=>({occurred_at,target_phone:'0900000001',counterparty_phone:'0900000002',record_kind:'data',duration_seconds:10,stations:[{station_key:'SYN',address:'臺北市合成地址'}]})));
+  await store.finish('legacy');
+  const scope={datasetId:'legacy'},summary=await store.summarize(scope);
+  const ranks=await store.aggregatePage(summary.queryKey,'phone:total');
+  assert.equal(ranks.total,2); assert.ok(ranks.rows.every(row=>row.count===4 && row.seconds===40));
+  assert.equal((await store.metadata('legacy')).invalid_dates,1);
+  const dated={...scope,date:{active:true,start:'2026-01-01',end:'2026-01-03'}};
+  const found=await store.hotspotPage(dated,{search:'01-02T11'});
+  assert.equal(found.total,1); assert.equal(found.rows[0].count,3);
+  assert.equal((await store.hotspotPage(dated,{search:'absent'})).total,0);
+  assert.equal((await store.hotspotPage(dated,{search:'合成'})).rows[0].count,3);
+  assert.equal((await store.metadata('legacy')).invalid_dates,1);
+});
+
 async function fixture(t) {
   assert.equal(typeof api.open, 'function', 'temporary dataset store must be implemented');
   const store = await api.open('test-' + crypto.randomUUID());
@@ -42,11 +59,63 @@ test('separates per-target users and full-scope call statistics from data sessio
   const summary=await store.summarize(scope);
   assert.equal(summary.call_count,1201);assert.equal(summary.data_count,1);
   assert.equal(summary.call_seconds,36030);assert.equal(summary.invalid_dates,1);
+  assert.equal(summary.target_count,1);assert.equal(summary.counterparty_count,1);
+  assert.equal(summary.total_duration_seconds,36930);
   const stats=await store.aggregatePage(summary.queryKey,'phone:total',{page:1});
   assert.equal(stats.rows.find(x=>x.key==='0900000003').count,1201);
   const hotspots=await store.aggregatePage(summary.queryKey,'hotspot',{page:1});
   assert.equal(hotspots.rows[0].count,1202);
   assert.equal('times' in hotspots.rows[0],false);
+});
+
+test('summary counts distinct targets and counterparties across call and data records', async t => {
+  const store = await api.open('summary-counts-' + crypto.randomUUID()); t.after(() => store.destroy());
+  await store.begin('counts', {});
+  await store.appendRecords('counts', [
+    { target_phone: '0900000001', counterparty_phone: '0900000011', record_kind: 'call', occurred_at: '2026-01-01T00:00:00', duration_seconds: 10 },
+    { target_phone: '0900000002', counterparty_phone: '0900000011', record_kind: 'data', occurred_at: '2026-01-01T01:00:00', duration_seconds: 20 },
+    { target_phone: '0900000002', counterparty_phone: '0900000012', record_kind: 'data', occurred_at: '2026-01-01T02:00:00', duration_seconds: 30 },
+  ]);
+  await store.finish('counts');
+  const summary = await store.summarize({ datasetId: 'counts' });
+  assert.equal(summary.target_count, 2);
+  assert.equal(summary.counterparty_count, 2);
+  assert.equal(summary.total_duration_seconds, 60);
+});
+
+test('legacy summary ranks both endpoints of data records while multi summary remains call-only', async t => {
+  const store = await api.open('legacy-stats-' + crypto.randomUUID()); t.after(() => store.destroy());
+  const row = { target_phone: '0900000001', counterparty_phone: '0900000002', record_kind: 'data', direction: 'data', occurred_at: '2026-01-01T00:00:00', duration_seconds: 45 };
+  await store.begin('legacy', { ui_mode: 'legacy' });
+  await store.appendRecords('legacy', [row]);
+  await store.finish('legacy');
+  const legacySummary = await store.summarize({ datasetId: 'legacy' });
+  const legacyTotal = await store.aggregatePage(legacySummary.queryKey, 'phone:total');
+  assert.deepEqual(legacyTotal.rows.map(item => [item.key, item.count, item.seconds]), [
+    ['0900000001', 1, 45],
+    ['0900000002', 1, 45],
+  ]);
+
+  await store.begin('multi', { ui_mode: 'multi' });
+  await store.appendRecords('multi', [row]);
+  await store.finish('multi');
+  const multiSummary = await store.summarize({ datasetId: 'multi' });
+  const multiTotal = await store.aggregatePage(multiSummary.queryKey, 'phone:total');
+  assert.equal(multiTotal.total, 0);
+});
+
+test('dataset metadata retains full invalid-date count after a filtered summary', async t => {
+  const store = await api.open('metadata-dates-' + crypto.randomUUID()); t.after(() => store.destroy());
+  await store.begin('dates', { ui_mode: 'legacy' });
+  await store.appendRecords('dates', [
+    { target_phone: '0900000001', record_kind: 'call', occurred_at: 'invalid' },
+    { target_phone: '0900000001', record_kind: 'call', occurred_at: '2026-01-01T00:00:00' },
+  ]);
+  await store.finish('dates');
+  assert.equal((await store.metadata('dates')).invalid_dates, 1);
+  const filtered = await store.summarize({ datasetId: 'dates', date: { active: true, start: '2026-01-01', end: '2026-01-01' } });
+  assert.equal(filtered.invalid_dates, 0);
+  assert.equal((await store.metadata('dates')).invalid_dates, 1);
 });
 
 test('searches and sorts across all pages and invalidates note-dependent searches',async t=>{

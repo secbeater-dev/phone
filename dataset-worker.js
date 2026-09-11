@@ -1,14 +1,14 @@
 /* All data processing remains inside this same-origin dedicated worker. */
 importScripts(
   './vendor/zip-no-worker-inflate-2.7.57.min.js', './vendor/sax-1.4.1.js',
-  './cdr-model.js?v=20260910-multi-phone-v2', './streaming-xlsx.js?v=20260910-multi-phone-v2',
-  './dataset-store.js?v=20260910-multi-phone-v2', './dataset-report.js?v=20260910-multi-phone-v2'
+  './cdr-model.js?v=20260911-legacy-ui-v1', './streaming-xlsx.js?v=20260911-legacy-ui-v1',
+  './dataset-store.js?v=20260911-legacy-ui-v1', './dataset-report.js?v=20260911-legacy-ui-v1'
 );
 let store, queue = Promise.resolve(), legacyLoaded = false, xlsxLoaded = false, pdfLoaded = false;
 const jobs = new Map();
 function legacy() {
   if (!legacyLoaded) {
-    importScripts('./vendor/xlsx.full.min.js', './attachment-export.js?v=20260910-multi-phone-v2', './app.js?v=20260910-multi-phone-v2');
+    importScripts('./vendor/xlsx.full.min.js', './attachment-export.js?v=20260911-legacy-ui-v1', './app.js?v=20260911-legacy-ui-v1');
     legacyLoaded = true;
   }
 }
@@ -18,6 +18,20 @@ function safeError(error) {
   return error.publicMessage || '檔案格式不符、資料損壞或本機儲存失敗；原有資料未變更。';
 }
 function publicError(message) { const error = new Error(message); error.publicMessage = message; return error; }
+function sourceMetadata(source = {}) {
+  const declared = Array.isArray(source.source_formats) ? source.source_formats : [];
+  const fallback = source.source_format && !['workspace_volume', 'merged_datasets'].includes(source.source_format) ? [source.source_format] : [];
+  const source_formats = [...new Set((declared.length ? declared : fallback).map(value => String(value || '').trim()).filter(Boolean))];
+  if (!source_formats.length) source_formats.push('legacy');
+  return { source_formats, ui_mode: source_formats.includes('multi_phone_streaming_xlsx') ? 'multi' : 'legacy' };
+}
+function mergedSourceMetadata(datasets = []) {
+  const source_formats = [...new Set(datasets.flatMap(dataset => sourceMetadata(dataset).source_formats))];
+  return { source_formats, ui_mode: source_formats.includes('multi_phone_streaming_xlsx') ? 'multi' : 'legacy' };
+}
+function workspaceVolumeCase(metadata, volume, totalRecords) {
+  return { ...metadata, source_format: 'workspace_volume', volume, total_records: totalRecords, subject: {} };
+}
 async function importOne(file, id, signal, progress) {
   const info = /\.xlsx$/i.test(file.name) ? await PhoneStreamingXlsx.inspect(file, { signal }) : { supported: false };
   if (info.supported) {
@@ -32,16 +46,21 @@ async function importOne(file, id, signal, progress) {
     let summary;
     if (info.supported) {
       summary = await PhoneStreamingXlsx.importFile(file, { signal, stringStore: store.stringStore(id), onUsers: rows => store.appendUsers(id, rows), onRecords: rows => store.appendRecords(id, rows), onProgress: progress });
+      Object.assign(summary, sourceMetadata(summary));
     } else {
       legacy(); PhoneDatasetStore.check(signal);
       progress({ stage: '解析既有格式', processedRows: 0 });
-      let workspace, subjects;
+      let workspace, subjects, sourceCase;
       if (/\.json$/i.test(file.name)) {
         const parsed = JSON.parse(await file.text());
         if (!parsed.case || !Array.isArray(parsed.records)) throw publicError('不是支援的 workspace JSON。');
+        sourceCase = parsed.case;
         workspace = PhoneWorkbench.normalizeWorkspace(parsed);
         subjects = Array.isArray(parsed.subjects) ? parsed.subjects : null;
-      } else workspace = PhoneWorkbench.parseImportFile(file.name, await file.arrayBuffer());
+      } else {
+        workspace = PhoneWorkbench.parseImportFile(file.name, await file.arrayBuffer());
+        sourceCase = workspace.case;
+      }
       PhoneDatasetStore.check(signal);
       const stations = new Map((workspace.base_stations || []).map(s => [s.station_key, s]));
       for (let i = 0; i < workspace.records.length; i += 1000) {
@@ -61,7 +80,7 @@ async function importOne(file, id, signal, progress) {
         const phone = explicit.length === 1 ? explicit[0] : phones.length === 1 ? phones[0] : '';
         if (Object.keys(subject).length) await store.appendUsers(id, [{ phone, subject, source_file: file.name, source_sheet: workspace.case.sheet_name || '', row_number: 0 }]);
       }
-      summary = { source_file: file.name, source_files: [file.name], source_format: workspace.case.source_format, sheet_name: workspace.case.sheet_name, warning_count: workspace.parse_warnings?.length || 0 };
+      summary = { source_file: file.name, source_files: [file.name], source_format: workspace.case.source_format, sheet_name: workspace.case.sheet_name, warning_count: workspace.parse_warnings?.length || 0, ...sourceMetadata(sourceCase) };
     }
     return await store.finish(id, summary);
   } catch (error) { await store.remove(id).catch(() => {}); throw error; }
@@ -81,7 +100,7 @@ async function importBatch(files, signal, progress) {
     let dataset = datasets[0];
     if (datasets.length > 1) {
       const id = crypto.randomUUID();
-      await store.begin(id, { source_file: '多檔匯入', source_files: datasets.flatMap(d => d.source_files || []), source_format: 'merged_datasets' });
+      await store.begin(id, { source_file: '多檔匯入', source_files: datasets.flatMap(d => d.source_files || []), source_format: 'merged_datasets', ...mergedSourceMetadata(datasets) });
       datasets.push({ id });
       for (const source of datasets.slice(0, -1)) {
         await store.scan({ datasetId: source.id }, rows => store.appendRecords(id, rows), { signal });
@@ -108,6 +127,7 @@ async function handle(op, payload, signal, progress) {
   if (op === 'users') return store.users(payload.scope, payload.options);
   if (op === 'page') return store.page(payload.scope, payload.options, signal);
   if (op === 'summary') { legacy(); return store.summarize(payload.scope, { signal, onProgress: progress, classifyCounty: PhoneWorkbench.classifyTaiwanCounty }); }
+  if (op === 'hotspots') { legacy(); return store.hotspotPage(payload.scope, payload.options, { signal, onProgress: progress, classifyCounty: PhoneWorkbench.classifyTaiwanCounty }); }
   if (op === 'ticketPhones') {
     legacy();
     const summary = await store.summarize({ datasetId: payload.datasetId }, { signal, classifyCounty: PhoneWorkbench.classifyTaiwanCounty });
@@ -145,7 +165,7 @@ async function handle(op, payload, signal, progress) {
     if (op === 'jsonVolume') {
       const stations = [...new Map(part.rows.flatMap(r => r.stations || []).map(s => [s.station_key, s])).values()];
       const records = part.rows.map(row => { const result = { ...row }; delete result.dataset_id; delete result.seq; delete result.time_key; delete result.stations; return result; });
-      return { after, bytes: new TextEncoder().encode(JSON.stringify({ case: { ...metadata, source_format: 'workspace_volume', volume: payload.volume, total_records: records.length, subject: {} }, records, base_stations: stations, subjects: users.rows, parse_warnings: [] })) };
+      return { after, bytes: new TextEncoder().encode(JSON.stringify({ case: workspaceVolumeCase(metadata, payload.volume, records.length), records, base_stations: stations, subjects: users.rows, parse_warnings: [] })) };
     }
     const summary = await store.summarize(payload.scope, { signal, classifyCounty: PhoneWorkbench.classifyTaiwanCounty });
     const report = PhoneDatasetReport.buildVolume({ records: part.rows, users: users.rows, metadata, summary, volume: payload.volume, label: payload.label, notes: payload.notes }, PhoneWorkbench);
