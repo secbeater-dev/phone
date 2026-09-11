@@ -29,4 +29,10 @@ The private large-file run passed import, calls/network switching, profiles/rank
 
 This is not a certification on physical 4-core / 8-GiB hardware; the development host has 64 GiB RAM. The sub-200-ms UI goal was not met on every sample, but imports completed, cancellation worked, and processing stayed in bounded Worker/disk operations. Available storage, disk speed and other running applications affect actual results.
 
-Production deployment verification is added after the release is published.
+## Production verification
+
+Commit `db744b2b674a6a8ba166256538247737cc7673ea` was pushed to `main`. The [GitHub Pages deployment](https://github.com/secbeater-dev/phone/actions/runs/34571745546) completed successfully, including Node tests, browser regression tests and the sensitive-file/allowlist checks.
+
+At [phone.secbeater.com](https://phone.secbeater.com/), the HTML carries `20260911-legacy-ui-v1` and all 12 checked runtime assets match the local SHA-256 hashes. The complete synthetic production browser suite passed 13 checks with 5 opt-in skips. It verified original empty/legacy controls, multi-only controls, mixed and partial failures, clear and ticket reset, all-target legacy queries, dates, pagination, profiles, rankings, hour/hotspot controls, JSON provenance roundtrips, legacy six-sheet XLSX detail/summary exports, multi XLSX/network PDF, cancellation, quota protection, rapid switching and orphan-session cleanup.
+
+The BrowserContext request audit includes Worker requests and passed: only same-origin GET requests reached the network; CSP-blocked third-party attempts had no HTTP response. There were no challenge iframes or unexpected page errors. Production tests used synthetic inputs; private compatibility evidence comes from the local origin with identical runtime assets.
