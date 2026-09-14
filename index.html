@@ -4,10 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT' 'sha384-15400o7achiVrXywgO3RTR6MC09CIMqnGUj701AjYevx1UvEXQs+YUPLx9HOVvgY' 'sha384-e5kS+bTxvLk3bTkYbkBR0HTvWaznyL/jSn3tylERn0k65uAt/aZ/tPv1oNSprzPM' 'sha384-2O5xj9IYrSW3RVQOgBQZS6gRtChusGwnYKJ6mQy7ZDd+wKBMBVYTUKn4II5XrNHG' 'sha384-MHfeLQiEmPowuh0sml3mQSK8fi1UC3DTMKJSkzO7OrqQ/SuSM+gQ6edNWO4qAB6U' 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' 'sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn' 'sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'self'; media-src 'none'; manifest-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT' 'sha384-15400o7achiVrXywgO3RTR6MC09CIMqnGUj701AjYevx1UvEXQs+YUPLx9HOVvgY' 'sha384-ES7vKNTY+3NjqR/rU3gHcCdarkw+GczDcmpV7klqv8izXkDrTnHwVWGkxFuSJGYw' 'sha384-2O5xj9IYrSW3RVQOgBQZS6gRtChusGwnYKJ6mQy7ZDd+wKBMBVYTUKn4II5XrNHG' 'sha384-vB8/mgkqTbTr7ieDcNXVnlHMxIJpQPRQZZfRkbTp3uKTPEctlSX8AZIc4KYGmT/m' 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' 'sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn' 'sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'self'; media-src 'none'; manifest-src 'none'" />
     <title>通聯資料分析工具</title>
     <link rel="icon" type="image/png" href="./assets/Beater_icon.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260911-legacy-ui-v1" />
+    <link rel="stylesheet" href="./styles.css?v=20260915-compat-repair-v1" />
   </head>
   <body>
     <div class="app-shell">
@@ -362,10 +362,10 @@
         <div class="import-progress-track" aria-hidden="true"><span id="importProgressFill"></span></div>
       </div>
     </section>
-    <script src="./vendor/xlsx.full.min.js?v=20260911-legacy-ui-v1" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
-    <script src="./attachment-export.js?v=20260911-legacy-ui-v1" integrity="sha384-15400o7achiVrXywgO3RTR6MC09CIMqnGUj701AjYevx1UvEXQs+YUPLx9HOVvgY" crossorigin="anonymous"></script>
-    <script src="./dataset-client.js?v=20260911-legacy-ui-v1" integrity="sha384-e5kS+bTxvLk3bTkYbkBR0HTvWaznyL/jSn3tylERn0k65uAt/aZ/tPv1oNSprzPM" crossorigin="anonymous"></script>
-    <script src="./dataset-ui.js?v=20260911-legacy-ui-v1" integrity="sha384-2O5xj9IYrSW3RVQOgBQZS6gRtChusGwnYKJ6mQy7ZDd+wKBMBVYTUKn4II5XrNHG" crossorigin="anonymous"></script>
-    <script src="./app.js?v=20260911-legacy-ui-v1" integrity="sha384-MHfeLQiEmPowuh0sml3mQSK8fi1UC3DTMKJSkzO7OrqQ/SuSM+gQ6edNWO4qAB6U" crossorigin="anonymous"></script>
+    <script src="./vendor/xlsx.full.min.js?v=20260915-compat-repair-v1" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
+    <script src="./attachment-export.js?v=20260915-compat-repair-v1" integrity="sha384-15400o7achiVrXywgO3RTR6MC09CIMqnGUj701AjYevx1UvEXQs+YUPLx9HOVvgY" crossorigin="anonymous"></script>
+    <script src="./dataset-client.js?v=20260915-compat-repair-v1" integrity="sha384-ES7vKNTY+3NjqR/rU3gHcCdarkw+GczDcmpV7klqv8izXkDrTnHwVWGkxFuSJGYw" crossorigin="anonymous"></script>
+    <script src="./dataset-ui.js?v=20260915-compat-repair-v1" integrity="sha384-2O5xj9IYrSW3RVQOgBQZS6gRtChusGwnYKJ6mQy7ZDd+wKBMBVYTUKn4II5XrNHG" crossorigin="anonymous"></script>
+    <script src="./app.js?v=20260915-compat-repair-v1" integrity="sha384-vB8/mgkqTbTr7ieDcNXVnlHMxIJpQPRQZZfRkbTp3uKTPEctlSX8AZIc4KYGmT/m" crossorigin="anonymous"></script>
   </body>
 </html>

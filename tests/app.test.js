@@ -534,7 +534,7 @@ test("keeps the existing Taiwan Mobile parser behavior", () => {
   assert.equal(workspace.records[0].direction, "outbound");
 });
 
-const ASSET_VERSION = "20260911-legacy-ui-v1";
+const { version: ASSET_VERSION } = require("../scripts/release-version.json");
 
 test("builds independent carrier ticket lookup CSV for profile and live location", () => {
   const now = new Date(2026, 7, 27, 8, 25, 12);
