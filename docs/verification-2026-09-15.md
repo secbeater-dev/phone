@@ -36,4 +36,18 @@ It passed in 120 s overall. Import timings were 22 s for 100,000 synthetic calls
 
 The 13 normal browser cases cover desktop/mobile controls, legacy expanded-file limits, initial/legacy/multi/mixed interfaces, partial/all import failure, dates, profiles, rankings/hotspots, JSON provenance and subjects roundtrips, scoped XLSX/network PDF, import cancellation, quota errors, target switching, tab cleanup and page/Worker request auditing.
 
-Code review and production verification are recorded after those stages complete.
+### Review and deployment
+
+Task-scoped and final whole-branch reviews approved the repair with no actionable findings. A local allowlist check found all 31 published files present, no development directories in the artifact list, and no tracked sensitive-file pattern.
+
+The release was merged to `main` at `d134b2ae77d758aa4f7ef1a2faa85d461a240506`. [GitHub Pages run 34972012465](https://github.com/secbeater-dev/phone/actions/runs/34972012465) completed successfully on 2026-09-15, including Linux Node and Chromium tests, sensitive-file checks and deployment. The runtime repair commit is [`665bbad`](https://github.com/secbeater-dev/phone/commit/665bbadd96ea052330f59696ac6869738c8b4651).
+
+### Production verification
+
+[phone.secbeater.com](https://phone.secbeater.com/) returned HTTP 200 and release `20260915-compat-repair-v1`. Its CSP matched the generated local HTML; all five entry script SRI values matched local bytes. SHA-256 matched for all 21 checked assets: 17 JavaScript files, the stylesheet and three images.
+
+```bash
+PHONE_TEST_URL=https://phone.secbeater.com/ PHONE_BROWSER_CHANNEL=chromium-headless-shell npm run test:browser
+```
+
+The synthetic production suite passed all 13 regular cases with zero failures; two visual, two private and the optional performance test were skipped (18 total). The page/Worker request audit passed, with no challenge iframe or unexpected page error. Large-file performance evidence is from the separate local Edge run above. No private input was used on the production origin.
