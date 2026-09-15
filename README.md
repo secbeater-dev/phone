@@ -42,11 +42,13 @@ Use a current 64-bit Edge or Chrome with site storage enabled. Large original mu
 
 ```bash
 npm ci
+node scripts/update-assets.js
 npm test
 npx playwright install chromium
 PHONE_BROWSER_CHANNEL=chromium npm run test:browser
-node scripts/update-assets.js
 ```
+
+For a release, set `version` in `scripts/release-version.json`, then run the asset updater before testing. It synchronizes the page, styles, entry scripts, Worker imports and delayed export libraries, normalizes runtime text to LF, and regenerates CSP/SRI hashes. Re-running it without changes produces identical assets. Commit the generated assets with the version setting; the development-only setting and updater are excluded from the Pages artifact.
 
 On Windows, browser tests default to installed Edge. `PHONE_TEST_URL` points the synthetic browser suite at a deployment. The private large-file test is opt-in with `PRIVATE_MULTI_XLSX`, stays on the local test origin, emits only pass/fail and performance metrics, and saves no source data or screenshots. Never set both variables for a private-file test.
 

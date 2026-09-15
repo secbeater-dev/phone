@@ -37,7 +37,9 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
    └─ licenses/                 # 第三方程式與字型授權
 ```
 
-正式網站沒有建置或安裝步驟。開發測試用 `npm ci` 安裝固定版本 fake-indexeddb 與 Playwright；`npm test` 執行 Node 合成測試，`npm run test:browser` 執行瀏覽器測試。新增 `cdr-model.js`、`streaming-xlsx.js`、`dataset-store.js`、`dataset-worker.js`、`dataset-client.js`、`dataset-ui.js`、`dataset-report.js`；vendor 新增 zip.js 2.7.57（無子 Worker、無 WASM）與 SAX 1.4.1 及授權。`scripts/update-assets.js` 正規化 LF 並更新版本及 SRI，修改受雜湊保護的腳本後必須執行。
+正式網站沒有建置或安裝步驟。開發測試用 `npm ci` 安裝固定版本 fake-indexeddb 與 Playwright；`npm test` 執行 Node 合成測試，`npm run test:browser` 執行瀏覽器測試。新增 `cdr-model.js`、`streaming-xlsx.js`、`dataset-store.js`、`dataset-worker.js`、`dataset-client.js`、`dataset-ui.js`、`dataset-report.js`；vendor 新增 zip.js 2.7.57（無子 Worker、無 WASM）與 SAX 1.4.1 及授權。
+
+`scripts/release-version.json` 的 `version` 是唯一手動維護的發布版本。修改版本或受雜湊保護的腳本後，先執行 `node scripts/update-assets.js`，同步首頁、樣式、入口腳本、主程式／解析器／dataset Worker 載入路徑及延遲匯出套件的版本；在執行內容正規化為 LF 後更新 CSP、入口 SRI 及延遲套件雜湊，再執行測試。產生後的資產與版本設定一起提交；重複執行結果應相同。版本設定與更新工具僅供開發，不加入 Pages 發布白名單。
 
 ## 3. 載入順序
 
@@ -256,6 +258,8 @@ legacy 模式附卷使用完整批次與日期範圍，網路種類記錄保留�
 
 新增 `tests/browser/legacy-ui.test.js` 驗證原控制項、完整 legacy 目標範圍、條件式新版入口與格式切換；`PHONE_VISUAL_BASELINE=1` 啟用與 `b922521` 的初始畫面逐像素比對。`PRIVATE_COMPAT_DIR` 指定 repository 外的相容性資料夾，遞迴驗證 XLSX/XML 及 ZIP 內 XML；解壓暫存限 repository 外，XSL 不作為通聯輸入。私密驗證僅回報匿名檔案序號與階段通過／失敗。
 
+發布工具回歸測試在隔離暫存目錄執行真正的更新腳本，檢查跨版本同步全部載入路徑、修改內容及 CRLF 後的雜湊、重複執行的位元組一致性；既有資產檢查從同一發布設定取得預期版本。
+
 ## 11. GitHub Pages 部署
 
 `.github/workflows/pages.yml` 在 `main` push 或手動觸發時：
@@ -277,6 +281,8 @@ legacy 模式附卷使用完整批次與日期範圍，網路種類記錄保留�
 修改前：完整閱讀本文件、確認私密檔在 repository 外、檢查工作樹。修改後：更新本文件、以合成資料測試、以無內容輸出的方式驗證真實檔、檢查 Git index/歷史/部署白名單與網路請求，並新增異動紀錄。
 
 ## 14. 異動紀錄
+
+- 2026-09-15：本機同步至上游 `5a92ebb`，保留原有 8 月分支。修復發布腳本僅替換舊固定版本、導致新首頁與舊 Worker 快取版本混用的問題；加入單一版本設定、完整載入路徑同步及發布工具回歸測試。新舊匯入功能沿用上游實作；本次驗證及發布結果記於 `docs/verification-2026-09-15.md`。
 
 - 2026-09-11：恢復版已推送並成功部署；正式站 12 個執行資產 SHA-256 與本機一致，13 項瀏覽器驗證通過。60 組舊版畫面比對、指定私密資料夾逐檔及整批相容性、大型合成資料及四邏輯處理器原始大檔測試通過。量測結果與實體 8 GiB 硬體限制記於 `docs/verification-2026-09-11.md`。
 
