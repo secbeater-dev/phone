@@ -79,7 +79,7 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 
 `dataset-ui.js` 將 Worker 查詢結果接入原有 `callsView`／`profileView`／`statsView`／`hoursView`，沿用原版表格、可調欄寬、六張摘要卡、排行卡、24 小時選取與套用、圖表及縣市日期視窗。只有網路歷程使用新增的 `networkView`。查詢資料保持有界，不重建全部記憶體 workspace；用戶、IMEI、排行與熱點明細需要時分頁。
 
-資料服務初始化不代表已匯入。只有成功採用資料集後才啟用查詢介面；初始畫面維持 `b922521` 外觀。資料集 metadata 的 `source_formats` 保存成功來源格式，`ui_mode` 只依是否包含 `multi_phone_streaming_xlsx` 決定 `multi`／`legacy`。多檔合併及 JSON 分卷保存來源格式；不依檔名、門號數或單獨的 `workspace_volume` 標記推測模式。無明確新版來源資訊的舊 JSON 使用 legacy。
+資料服務初始化不代表已匯入。只有成功採用資料集後才啟用查詢介面；初始畫面維持 `b922521` 外觀。一般檔案匯入（含拖放、部分成功及 workspace JSON）成功後自動切至「時間分布圖」，即使原本已在此頁也重新查詢新資料；舊版相容匯入採相同行為。全部失敗或取消保留目前頁面，多門號位置維持獨立流程。資料集 metadata 的 `source_formats` 保存成功來源格式，`ui_mode` 只依是否包含 `multi_phone_streaming_xlsx` 決定 `multi`／`legacy`。多檔合併及 JSON 分卷保存來源格式；不依檔名、門號數或單獨的 `workspace_volume` 標記推測模式。無明確新版來源資訊的舊 JSON 使用 legacy。
 
 legacy 模式隱藏目標／日期控制區、網路入口與網路 PDF，使用原側欄日期視窗，查詢完整批次的所有門號及記錄種類；電話排行與附卷維持既有全記錄語意。multi 模式顯示目標選擇控制區，所選目標同步通聯、網路、用戶、排行、時間熱點與附卷；電話排行只計通聯。混合批次只要有成功的新版來源即為 multi，失敗來源不影響模式。取消或全部失敗保留原資料與模式；清除回到原始空畫面。多門號位置不受一般資料模式影響。
 
@@ -97,7 +97,7 @@ legacy 模式隱藏目標／日期控制區、網路入口與網路 PDF，使用
   └─ XLSX → XLSX.read → parseXlsxWorkbook
        → 格式偵測 → 格式 parser；僅遠傳 Order 再補 raw cell
   → 成功 workspace 集合 → mergeWorkspaces（一次）
-  → applyWorkspace → 切換通聯列表 → renderActiveView
+  → applyWorkspace → 切換時間分布圖 → renderActiveView
 ```
 
 同一次選取的所有成功檔案合併成一個 workspace；部分失敗仍保留成功項目並顯示失敗狀態，全部失敗則不改變現有資料。下一批只要至少一檔成功，就以該批合併結果取代目前 workspace。合併時重算摘要、電話統計、時間分布及基地台；同名 `subject` 欄位的不同非空值去重後以 `、` 合併。
@@ -260,6 +260,8 @@ legacy 模式附卷使用完整批次與日期範圍，網路種類記錄保留�
 
 發布工具回歸測試在隔離暫存目錄執行真正的更新腳本，檢查跨版本同步全部載入路徑、修改內容及 CRLF 後的雜湊、重複執行的位元組一致性；既有資產檢查從同一發布設定取得預期版本。
 
+`tests/browser/import-landing.test.js` 使用合成多電話 XLSX、legacy XLSX 與 JSON，驗證主流程及舊版相容流程匯入後開啟時間分布圖、導覽選取與 24 小時統計更新，以及部分成功／全部失敗。既有列表與選擇性相容性測試先明確切至通聯列表；大型合成測試先驗證預設時間圖，再驗證列表分頁與匯出取消。
+
 ## 11. GitHub Pages 部署
 
 `.github/workflows/pages.yml` 在 `main` push 或手動觸發時：
@@ -281,6 +283,8 @@ legacy 模式附卷使用完整批次與日期範圍，網路種類記錄保留�
 修改前：完整閱讀本文件、確認私密檔在 repository 外、檢查工作樹。修改後：更新本文件、以合成資料測試、以無內容輸出的方式驗證真實檔、檢查 Git index/歷史/部署白名單與網路請求，並新增異動紀錄。
 
 ## 14. 異動紀錄
+
+- 2026-09-16：一般檔案與 workspace JSON 匯入成功後預設顯示「時間分布圖」，同步更新 Worker 資料集與舊版相容匯入流程；新增匯入首頁及圖表資料回歸測試，調整既有列表測試的明確導覽。Node 65 項、一般瀏覽器 15 項與 Edge 10 萬／20 萬筆時間圖測試通過，紀錄見 `docs/verification-2026-09-16.md`。發布版本為 `20260916-import-hours-v1`。
 
 - 2026-09-15：本機同步至上游 `5a92ebb`，保留原有 8 月分支。修復發布腳本僅替換舊固定版本、導致新首頁與舊 Worker 快取版本混用的問題；加入單一版本設定、完整載入路徑同步及發布工具回歸測試。新舊匯入功能沿用上游實作。Node 65 項通過，正式站 21 個資產雜湊一致、13 項合成瀏覽器回歸通過，Edge 10 萬／20 萬筆匯入與匯出取消測試通過；下載版 Chromium 的啟動與效能限制另記於 `docs/verification-2026-09-15.md`。發布版本為 `20260915-compat-repair-v1`。
 

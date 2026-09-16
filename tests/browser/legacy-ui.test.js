@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { start, synthetic } = require('./helpers');
+const { start, synthetic, waitForImport } = require('./helpers');
 
 const legacy = () => ({name:'synthetic-legacy.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({case:{source_file:'synthetic',subject:{'用戶名稱':'合成使用者'}},records:[
   {target_phone:'0900000001',counterparty_phone:'0900000003',occurred_at:'2026-01-01T10:00:00',call_type:'發話',direction:'outbound',duration_seconds:30},
@@ -8,8 +8,9 @@ const legacy = () => ({name:'synthetic-legacy.json',mimeType:'application/json',
 ],base_stations:[]}))});
 async function imported(page, file) {
   await page.locator('#fileInput').setInputFiles(file);
-  await page.waitForFunction(()=>document.querySelector('#importProgressModal').hidden && document.querySelector('#importStatus').textContent.includes('匯入完成'));
-  await page.waitForFunction(()=>document.querySelector('#callsView').getAttribute('aria-busy') !== 'true');
+  await waitForImport(page);
+  await page.locator('[data-view="calls"]').click();
+  await page.waitForFunction(()=>document.querySelector('#callsView').getAttribute('aria-busy') === 'false');
 }
 test('empty views keep original controls and never show multi-phone controls', {timeout:60000}, async t=>{
   const {page,errors}=await start(t);

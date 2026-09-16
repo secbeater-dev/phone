@@ -61,6 +61,8 @@ test('legacy populated analysis pixels match the pre-multi interface', {skip:!pr
   await baseline.waitForFunction(()=>document.querySelector('#exportMessage').textContent.includes('已匯入資料 JSON'));
   await baseline.locator('[data-view="calls"]').click();
   await page.locator('#importWorkspaceInput').setInputFiles(input);
+  await page.locator('#importProgressModal').waitFor({state:'hidden'});
+  await page.locator('[data-view="calls"]').click();
   await page.waitForFunction(()=>document.querySelector('#importProgressModal').hidden && document.querySelector('#callRows').children.length===3);
   // Compare analysis panels with equal sidebar height; import progress wording is separate.
   for(const p of [baseline,page]) await p.evaluate(()=>{document.querySelector('#importStatus').textContent='合成驗證';document.querySelector('#importResults').innerHTML='';});

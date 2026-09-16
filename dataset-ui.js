@@ -106,7 +106,7 @@
       $('importStatus').textContent = `匯入完成：通聯 ${number(state.dataset.call_count)} 筆，網路 ${number(state.dataset.data_count)} 筆。`;
       if (old) await service.request('remove', { datasetId: old.id });
       status('資料只在本次瀏覽器工作階段使用；重新開啟須再次匯入。');
-      bridge.setView('calls');
+      bridge.setView('hours');
     } catch (error) { $('importStatus').textContent = error.name === 'AbortError' ? '已取消匯入，原有資料未變更。' : error.message; failure(error); }
     finally { state.busy = false; $('importButton').disabled = false; $('importProgressModal').hidden = true; $('fileInput').value = ''; }
   }

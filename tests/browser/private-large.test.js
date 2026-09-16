@@ -33,6 +33,7 @@ test('private large workbook stays local, responsive and queryable', { skip: !pr
     await page.locator('#importProgressModal').waitFor({ state: 'hidden', timeout: 1500000 });
     const imported = await page.evaluate(() => Boolean(document.querySelector('#datasetTarget')?.options.length && document.querySelector('#importStatus')?.textContent.startsWith('匯入完成')));
     if (!imported) throw new Error('verification failed');
+    await page.locator('[data-view="calls"]').click();
     await page.waitForFunction(() => Boolean(document.querySelector('#callRows tr')), undefined, { timeout: 120000 });
     const importSeconds = Math.round((Date.now() - started) / 1000);
     const importLag = await page.evaluate(()=>{const lag=window.__lag;window.__lag=0;return Math.round(lag);});

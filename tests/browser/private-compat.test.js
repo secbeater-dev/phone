@@ -113,6 +113,7 @@ async function waitForImport(page) {
     return Boolean(status && status.textContent.includes('匯入完成'));
   });
   if (!adopted) throw privateFailure('browser-import', 0);
+  await page.locator('[data-view="calls"]').click();
   await page.waitForFunction(() => document.querySelector('#callsView')?.getAttribute('aria-busy') === 'false', undefined, { timeout: 120000 });
 }
 

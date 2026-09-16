@@ -39,4 +39,10 @@ function synthetic(count = 1101) {
   for(const [name,rows] of Object.entries({'通聯紀錄':calls,'使用者資料':users,'網路歷程':data,'通聯整合歷程紀錄':calls})) XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),name);
   return { name: 'synthetic-multi.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(XLSX.write(wb,{bookType:'xlsx',type:'buffer',compression:true,bookSST:true})) };
 }
-module.exports={start,synthetic};
+async function waitForImport(page, timeout = 30000) {
+  await page.waitForFunction(() => document.querySelector('#importProgressModal').hidden &&
+    document.querySelector('#importStatus').textContent.includes('匯入完成') &&
+    document.querySelector('#hoursView').classList.contains('active-view') &&
+    document.querySelector('#hoursView').getAttribute('aria-busy') === 'false', undefined, { timeout });
+}
+module.exports={start,synthetic,waitForImport};

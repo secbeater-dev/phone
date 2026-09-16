@@ -1,8 +1,8 @@
 /* Dedicated import worker. Keep identifiers independent of the main UI layer. */
 /* global importScripts, PhoneWorkbench */
 importScripts(
-  "./vendor/xlsx.full.min.js?v=20260915-compat-repair-v1",
-  "./app.js?v=20260915-compat-repair-v1"
+  "./vendor/xlsx.full.min.js?v=20260916-import-hours-v1",
+  "./app.js?v=20260916-import-hours-v1"
 );
 
 self.onmessage = function onImportParserMessage(event) {

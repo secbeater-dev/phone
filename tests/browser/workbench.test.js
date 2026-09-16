@@ -1,9 +1,11 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {start,synthetic}=require('./helpers');
+const {start,synthetic,waitForImport}=require('./helpers');
 test('single workbook imports both kinds; target/date/page and cleanup stay consistent', {timeout:120000}, async t=>{
   const {page,errors}=await start(t);
   await page.locator('#fileInput').setInputFiles(synthetic());
+  await waitForImport(page);
+  await page.locator('[data-view="calls"]').click();
   await page.locator('#datasetTarget').waitFor({state:'visible',timeout:5000});
   await page.waitForFunction(()=>document.querySelector('#datasetTarget')?.options.length>=2);
   assert.match(await page.locator('#datasetTarget').innerText(),/合成人物甲/);
@@ -32,6 +34,7 @@ test('single workbook imports both kinds; target/date/page and cleanup stay cons
 test('exports scoped XLSX/network PDF, cancels import, and clears orphan sessions on reload', {timeout:120000}, async t=>{
   const {page,context,errors}=await start(t);
   await page.locator('#fileInput').setInputFiles(synthetic(5));
+  await waitForImport(page);
   await page.waitForFunction(()=>document.querySelector('#datasetTarget')?.options.length===2);
   await page.locator('#attachmentExportButton').click();
   const downloadPromise=page.waitForEvent('download');await page.locator('#attachmentXlsxButton').click();
@@ -47,15 +50,16 @@ test('exports scoped XLSX/network PDF, cancels import, and clears orphan session
   await page.waitForFunction(()=>!document.querySelector('#attachmentXlsxButton').disabled);
   await page.locator('#attachmentExportCloseButton').click();
   const peer=await context.newPage();await peer.goto(page.url());await peer.locator('#noticeDismissButton').click();
-  await peer.locator('#fileInput').setInputFiles(synthetic(3));await peer.waitForFunction(()=>document.querySelector('#datasetTarget')?.options.length===2);
+  await peer.locator('#fileInput').setInputFiles(synthetic(3));await waitForImport(peer);
   assert.equal((await page.evaluate(()=>indexedDB.databases())).filter(d=>d.name.startsWith('phone-workbench-session-')).length,2);
   await peer.close();await page.reload();await page.locator('#noticeDismissButton').click();
-  await page.locator('#fileInput').setInputFiles(synthetic(2));await page.waitForFunction(()=>document.querySelector('#datasetTarget')?.options.length===2);
+  await page.locator('#fileInput').setInputFiles(synthetic(2));await waitForImport(page);
   assert.equal((await page.evaluate(()=>indexedDB.databases())).filter(d=>d.name.startsWith('phone-workbench-session-')).length,1);
+  await page.locator('button[data-view="network"]').click();
   await page.locator('#fileInput').setInputFiles(synthetic(50000));
   await page.locator('#datasetImportCancel').click();
   await page.locator('#importProgressModal').waitFor({state:'hidden'});
-  await page.locator('button[data-view="network"]').click();
+  assert.equal(await page.locator('#networkView').isVisible(),true,'cancelled import preserves the current view');
   await page.waitForFunction(()=>document.querySelector('#datasetRows')?.textContent.includes('192.0.2.1'));
   assert.deepEqual(errors,[]);
 });
@@ -70,12 +74,14 @@ test('legacy overlap, JSON subject volumes, quota failure and rapid target chang
     ['','','','','','','','SYNTH-2','']
   ]),'通聯紀錄');
   await page.locator('#fileInput').setInputFiles({name:'synthetic-legacy.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(wb.write(old,{type:'buffer',bookType:'xlsx'}))});
+  await waitForImport(page);
+  await page.locator('[data-view="calls"]').click();
   await page.waitForFunction(()=>document.querySelector('#callPageSummary')?.textContent.includes('共 1'));
   assert.match(await page.locator('#callRows').innerText(),/0900000009/);
   const subjects=Array.from({length:501},(_,i)=>({phone:'0900000001',subject:{'用戶名稱':`合成用戶 ${i}`},source_sheet:'使用者資料',row_number:i+2}));
   const input={case:{source_file:'synthetic.json'},records:[{target_phone:'0900000001',occurred_at:'2026-01-01T01:00:00',call_type:'發話',counterparty_phone:'0900000002'}],base_stations:[],subjects};
   await page.locator('#fileInput').setInputFiles({name:'synthetic.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(input))});
-  await page.waitForFunction(()=>document.querySelector('#importProgressModal')?.hidden && document.querySelector('#callPageSummary')?.textContent.includes('共 1'));
+  await waitForImport(page);
   await page.locator('#dataExportViewButton').click();
   const downloaded=[];page.on('download',d=>downloaded.push(d));
   await page.locator('#exportWorkspaceButton').click();
@@ -84,7 +90,7 @@ test('legacy overlap, JSON subject volumes, quota failure and rapid target chang
   const fs=require('node:fs');const exports=await Promise.all(downloaded.map(async d=>({name:d.suggestedFilename(),mimeType:'application/json',buffer:fs.readFileSync(await d.path())})));
   assert.equal(exports.map(f=>JSON.parse(f.buffer).subjects.length).reduce((a,b)=>a+b,0),501);
   await page.locator('#fileInput').setInputFiles(exports);
-  await page.waitForFunction(()=>document.querySelector('#importProgressModal')?.hidden && document.querySelector('#callPageSummary')?.textContent.includes('共 1'));
+  await waitForImport(page);
   await page.locator('button[data-view="profile"]').click();
   await page.locator('[data-dataset-page="next"]').click();
   await page.waitForFunction(()=>document.querySelector('#profileContent')?.textContent.includes('合成用戶 500'));
@@ -95,6 +101,8 @@ test('legacy overlap, JSON subject volumes, quota failure and rapid target chang
   assert.match(await page.locator('#profileContent').innerText(),/合成用戶 500/);
   await worker.evaluate(()=>{delete navigator.storage.estimate;});
   await page.locator('#fileInput').setInputFiles(synthetic(3));
+  await waitForImport(page);
+  await page.locator('[data-view="calls"]').click();
   await page.waitForFunction(()=>document.querySelector('#datasetTarget')?.options.length===2);
   for(const target of ['0900000002','0900000001','0900000002']) await page.locator('#datasetTarget').selectOption(target);
   await page.waitForFunction(()=>document.querySelector('#callsView')?.getAttribute('aria-busy')==='false' && document.querySelector('#callRows tr td:nth-child(4)')?.textContent==='0900000002');
@@ -106,6 +114,7 @@ test('legacy explicit subject phone stays associated when records contain multip
   const {page}=await start(t);
   const input={case:{source_file:'synthetic.json',source_formats:['multi_phone_streaming_xlsx'],subject:{'電話號碼':'0900000001','用戶名稱':'合成舊版案主'}},records:['0900000001','0900000002'].map(target_phone=>({target_phone,occurred_at:'2026-01-01T01:00:00',call_type:'發話'})),base_stations:[]};
   await page.locator('#fileInput').setInputFiles({name:'synthetic.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(input))});
+  await waitForImport(page);
   await page.waitForFunction(()=>document.querySelector('#datasetTarget')?.options.length===2);
   await page.locator('button[data-view="profile"]').click();
   await page.waitForFunction(()=>document.querySelector('#profileContent')?.textContent.includes('合成舊版案主'));

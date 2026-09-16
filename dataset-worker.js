@@ -1,14 +1,14 @@
 /* All data processing remains inside this same-origin dedicated worker. */
 importScripts(
-  './vendor/zip-no-worker-inflate-2.7.57.min.js?v=20260915-compat-repair-v1', './vendor/sax-1.4.1.js?v=20260915-compat-repair-v1',
-  './cdr-model.js?v=20260915-compat-repair-v1', './streaming-xlsx.js?v=20260915-compat-repair-v1',
-  './dataset-store.js?v=20260915-compat-repair-v1', './dataset-report.js?v=20260915-compat-repair-v1'
+  './vendor/zip-no-worker-inflate-2.7.57.min.js?v=20260916-import-hours-v1', './vendor/sax-1.4.1.js?v=20260916-import-hours-v1',
+  './cdr-model.js?v=20260916-import-hours-v1', './streaming-xlsx.js?v=20260916-import-hours-v1',
+  './dataset-store.js?v=20260916-import-hours-v1', './dataset-report.js?v=20260916-import-hours-v1'
 );
 let store, queue = Promise.resolve(), legacyLoaded = false, xlsxLoaded = false, pdfLoaded = false;
 const jobs = new Map();
 function legacy() {
   if (!legacyLoaded) {
-    importScripts('./vendor/xlsx.full.min.js?v=20260915-compat-repair-v1', './attachment-export.js?v=20260915-compat-repair-v1', './app.js?v=20260915-compat-repair-v1');
+    importScripts('./vendor/xlsx.full.min.js?v=20260916-import-hours-v1', './attachment-export.js?v=20260916-import-hours-v1', './app.js?v=20260916-import-hours-v1');
     legacyLoaded = true;
   }
 }
@@ -176,10 +176,10 @@ async function handle(op, payload, signal, progress) {
     legacy();
     PhoneDatasetStore.check(signal);
     if (payload.format === 'xlsx') {
-      if (!xlsxLoaded) { importScripts('./vendor/exceljs.min.js?v=20260915-compat-repair-v1'); xlsxLoaded = true; }
+      if (!xlsxLoaded) { importScripts('./vendor/exceljs.min.js?v=20260916-import-hours-v1'); xlsxLoaded = true; }
       return { bytes: await PhoneAttachmentExport.createAttachmentXlsx(payload.report, ExcelJS), mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
     }
-    if (!pdfLoaded) { importScripts('./vendor/pdf-lib.min.js?v=20260915-compat-repair-v1', './vendor/fontkit.umd.min.js?v=20260915-compat-repair-v1', './vendor/open-huninn-data.js?v=20260915-compat-repair-v1'); pdfLoaded = true; }
+    if (!pdfLoaded) { importScripts('./vendor/pdf-lib.min.js?v=20260916-import-hours-v1', './vendor/fontkit.umd.min.js?v=20260916-import-hours-v1', './vendor/open-huninn-data.js?v=20260916-import-hours-v1'); pdfLoaded = true; }
     const binary = atob(PhoneExportFontBase64), font = Uint8Array.from(binary, c => c.charCodeAt(0));
     return { bytes: await PhoneAttachmentExport.createAttachmentPdf(payload.report, payload.section, PDFLib, fontkit, font), mime: 'application/pdf' };
   }

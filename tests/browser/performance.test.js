@@ -1,6 +1,6 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {start,synthetic}=require('./helpers');
+const {start,synthetic,waitForImport}=require('./helpers');
 test('synthetic large and double-size imports keep bounded UI and cancellable exports', {skip:!process.env.PHONE_PERF,timeout:900000}, async t=>{
   const {page}=await start(t,{args:['--js-flags=--max-old-space-size=512']});
   let file;
@@ -14,6 +14,9 @@ test('synthetic large and double-size imports keep bounded UI and cancellable ex
     await page.evaluate(()=>{window.__lag=0;let last=performance.now();window.__timer=setInterval(()=>{const now=performance.now();window.__lag=Math.max(window.__lag,now-last-50);last=now;},50);});
     const started=Date.now();
     await page.locator('#fileInput').setInputFiles(filePath);
+    await waitForImport(page,600000);
+    assert.equal(await page.locator('.hour-bar-count').nth(10).innerText(),String(count));
+    await page.locator('[data-view="calls"]').click();
     await page.waitForFunction(n=>document.querySelector('#importProgressModal')?.hidden && document.querySelector('#callPageSummary')?.textContent.includes(n.toLocaleString()),count,{timeout:600000});
     assert.equal(await page.locator('#callRows tr').count(),500);
     const lag=await page.evaluate(()=>{clearInterval(window.__timer);return Math.round(window.__lag);});
