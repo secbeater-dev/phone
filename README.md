@@ -23,7 +23,9 @@ This GitHub Pages build runs fully in the browser. Imported files are parsed loc
 - Review the complete call list with 500-row pagination, subject metadata, time distribution, phone statistics, and a two-pane carrier ticket CSV builder for subscriber-profile or live-location queries.
 - Filter hotspot addresses by any combination of Taiwan's 22 current counties/cities plus an unrecognized-address category; 台 and 臺 are classified together, with bulk select and clear controls.
 - Apply an inclusive overall date range to the call list, profile summary and IMEI list, phone statistics, time/hotspot analysis, and attachment exports; resetting restores the complete import.
-- Import an independent in-memory batch for multi-number location analysis, matching distinct target phones that appear in the same Taiwan county/district within an inclusive 30-minute window; each match can expand its source location, time, phone pair, and matched base-station details while sharing the existing browser-only phone notes.
+- Import multiple files or an entire folder into an independent Worker/IndexedDB session for multi-number location analysis. Match distinct phones in the same Taiwan county/district within an inclusive 30-minute window; page through matches, complete phones and original source details.
+- Support Taiwan Mobile Chinese network XML/XLSX, query preambles, repeated headers and multiple sheets. Detailed analytical workbooks restore raw records by source XML and original record number. Summary-only workbooks are rejected explicitly. Base connection time is preferred; valid internet time is a labeled fallback.
+- Search the entire batch's phone cards on both location and profile pages, 20 per page. Expand deduplicated user fields and their sources; conflicting values remain visible. Profile statistics continue to follow the selected scope.
 - Export local attachments for the selected target/date range, covering time distribution, hotspots, calls, network history, profile data, and count/seconds phone rankings.
 - Export/import local browser settings and export parsed workspace JSON.
 - `/admin.html` and missing routes show a maintenance notice.
@@ -36,7 +38,7 @@ python -m http.server 8088
 
 Open `http://127.0.0.1:8088/`.
 
-Use a current 64-bit Edge or Chrome with site storage enabled. Large original multi-phone XLSX files use streaming import. Other legacy formats are limited to 16 MiB per file; legacy XLSX also requires total expanded ZIP parts within 64 MiB; independent multi-number location analysis is limited to 16 MiB per batch. Insufficient storage or unsupported browsers produce an error rather than falling back to main-thread large-file parsing.
+Use a current 64-bit Edge or Chrome with site storage enabled. Large original multi-phone XLSX files use streaming import. Other formats are limited to 16 MiB per file; legacy XLSX also requires total expanded ZIP parts within 64 MiB. Multi-number analysis has no combined 16 MiB batch limit and checks local storage quota. Insufficient storage or unsupported browsers produce a clear error.
 
 ## Development checks
 

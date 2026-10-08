@@ -28,6 +28,22 @@ body[data-theme="dark"] {
 
 * { box-sizing: border-box; }
 
+/* Phone cards use their own batch scope and pagination. */
+.phone-card-search { display: flex; flex-direction: column; gap: 8px; max-width: 440px; margin: 16px 0; }
+.phone-card-search input { width: 100%; min-height: 42px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; color: inherit; background: var(--surface); }
+.phone-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 16px; }
+.phone-card { padding: 18px; border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+.phone-card-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between; }
+.phone-card-heading h3 { margin: 0; font-variant-numeric: tabular-nums; }
+.phone-card-carrier { font-size: .85rem; color: var(--muted); }
+.phone-card-name { font-weight: 650; }
+.phone-card-details { margin-top: 16px; overflow-wrap: anywhere; }
+.phone-card-details .detail-list { display: block; }
+.phone-card-details dt { font-weight: 650; margin-top: 12px; }
+.phone-card-details dd { margin: 4px 0; }
+.phone-card-sources { margin-top: 6px; font-size: .8rem; }
+#multiLocationImportResults { max-height: 260px; overflow: auto; }
+
 body {
   margin: 0;
   min-height: 100vh;

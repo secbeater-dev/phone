@@ -4,7 +4,7 @@
 
 ## 1. 專案定位
 
-Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具。一般匯入由同源 `dataset-worker.js` 處理：多電話 XLSX 以 ZIP/XML 串流解析，既有小檔以本地 SheetJS／`app.js` 解析，再寫入使用者瀏覽器的工作階段 IndexedDB。列表與統計由 Worker 查詢，附卷在 Worker 分卷產生。沒有後端、伺服器資料庫、Service Worker 或上傳端點。下文保留的既有 parser 與記憶體 workspace 介面主要用於小檔相容、多門號位置及 Node 報表測試；一般大型匯入使用第 5.1 節的新資料流。
+Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具。一般匯入與多門號位置各自使用獨立的同源 `dataset-worker.js` 與工作階段 IndexedDB。多電話 XLSX 以 ZIP/XML 串流解析，既有小檔以本地 SheetJS／`app.js` 解析後分批寫入。列表、統計及位置比對由 Worker 查詢，附卷在 Worker 分卷產生。沒有後端、伺服器資料庫、Service Worker 或上傳端點。記憶體 workspace 與純函式比對保留供相容性及 Node 測試使用。
 
 功能包括同批多檔合併、通聯列表、用戶資料、電話統計、時間分布、基地台熱點、多門號位置、電話投單，以及附卷 XLSX/PDF、workspace、CSV 與本機設定匯出。
 
@@ -44,7 +44,7 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 ## 3. 載入順序
 
 1. `index.html` 建立側欄、七個 view、一般與多門號位置匯入控制、全域日期篩選視窗、熱點縣市篩選視窗、附卷匯出視窗、使用提醒與匯入進度遮罩；提醒只保留本地運行說明、作者 Telegram（連結文字為「作者」）、強制重啟（只更新網頁、不清本機設定），以及車輛辨識／蝦殼分析的站內圖片連結（完整顯示、不裁切）。
-2. 瀏覽器透過固定發布版本載入樣式及 SheetJS、attachment-export、dataset-client、dataset-ui、app 五個帶 SHA-384 SRI 的腳本。版本避免舊快取衝突；CSP `script-src` 含 `'self'` 與雜湊，Worker importScripts 僅載入同源固定路徑，`worker-src` 為 `'self'`。
+2. 瀏覽器透過固定發布版本載入樣式及 SheetJS、attachment-export、dataset-client、phone-cards-ui、multi-location-ui、dataset-ui、app 七個帶 SHA-384 SRI 的腳本。版本避免舊快取衝突；CSP `script-src` 含 `'self'` 與雜湊，Worker importScripts 僅載入同源固定路徑，`worker-src` 為 `'self'`。
 3. `app.js` 與 `attachment-export.js` 均以 UMD 包裝，可供瀏覽器及 Node 測試使用。只有使用者按下附卷下載時，`app.js` 才以固定版本路徑與 SRI 延遲載入 ExcelJS，或依序載入 pdf-lib、fontkit 與字型資料。
 4. `DOMContentLoaded` 執行 `init()`，還原偏好、綁定事件並只渲染目前作用中的 view。
 
@@ -59,7 +59,7 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 - `hourSelection`、`appliedHourSelection`、`expandedHotspotAddress`：時段與展開中熱點狀態。
 - `hotspotCountySelection`、`hotspotCountyDraft`：目前套用及彈窗草稿的縣市條件；預設包含現行 22 縣市及「未辨識」，只存在記憶體且新 workspace 匯入時重設。
 - `dateRangeBounds`、`dateRange`、`dateRangeDraft`：全部可解析通聯的日期界線、目前套用日期及彈窗草稿；只存在記憶體，新 workspace 成功匯入時重設為完整資料。
-- `multiLocationWorkspace`、`multiLocationMatches`、`multiLocationExcluded`、`multiLocationPage`、`multiLocationExpandedMatches`：多門號位置專用的獨立合併 workspace、符合事件、排除計數、500 筆分頁與目前展開的原始資料識別碼；只存在記憶體，不取代一般 workspace，也不讀取一般全域日期範圍。新批次成功匯入時展開集合清空。
+- `multi-location-ui.js` 保存專用資料集 ID、500 筆結果分頁與展開狀態；事件、視窗計數及結果存入獨立 IndexedDB，不取代一般資料集，也不讀取一般日期範圍。`phone-cards-ui.js` 保存各頁自己的門號搜尋、20 張分頁與欄位／來源明細頁碼。舊 `multiLocationWorkspace` 等欄位只供未載入新模組的相容流程使用。
 - `theme`、`sidebarCollapsed`：介面偏好。
 - `ticketQueryKind`：電話投單用途，`subscriber_profile` 或 `live_location`，只存在記憶體。
 
@@ -67,7 +67,7 @@ Phone Workbench 是部署在 GitHub Pages 的純前端通聯資料分析工具�
 
 ### 5.1 多電話與一般匯入（目前預設流程）
 
-`File Blob → ZIP 隨機讀取 → SAX XML → 標準化批次 → IndexedDB → Worker 查詢 → 畫面分頁`。不把整份 XLSX、工作表、sharedStrings 或全部通聯記錄傳到主執行緒。只消費「通聯紀錄」「使用者資料」「網路歷程」，跳過「通聯整合歷程紀錄」。`inspect` 檢查工作簿關聯及最多 80 列／2 MiB 的標題前綴，串流解決必要 shared-string 參照；須符合原始欄位並含「查詢項目」才走新解析器，避免同名的既有電信格式被誤判。其他支援格式最多 16 MiB，既有 XLSX 解壓後所有 ZIP 部件合計另限 64 MiB，仍在 Worker 使用既有 parser，禁止大型主執行緒 fallback。多門號位置維持獨立既有流程，同批限制 16 MiB。
+`File Blob → ZIP 隨機讀取 → SAX XML → 標準化批次 → IndexedDB → Worker 查詢 → 畫面分頁`。不把整份 XLSX、工作表、sharedStrings 或全部通聯記錄傳到主執行緒。只消費「通聯紀錄」「使用者資料」「網路歷程」，跳過「通聯整合歷程紀錄」。`inspect` 檢查工作簿關聯及最多 80 列／2 MiB 的標題前綴，串流解決必要 shared-string 參照；須符合原始欄位並含「查詢項目」才走新解析器，避免同名的既有電信格式被誤判。其他支援格式最多 16 MiB，既有 XLSX 解壓後所有 ZIP 部件合計另限 64 MiB，仍在 Worker 使用既有 parser，禁止大型主執行緒 fallback。多門號位置重用相同解析能力與個別檔案限制，取消整批 16 MiB 上限，並檢查工作階段儲存配額。
 
 每批最多 1,000 列或 4 MiB，XML 每次餵入 4 KiB，單節點最多 256 KiB、單來源列 2 MiB、metadata 4 MiB；shared strings 落盤，快取 2 MiB、每次索引回應至多 16 個字串。資料集 metadata 保存最大正規化列／用戶列大小，摘要保存最大彙總列大小；讀取據此縮小每批筆數，使資料庫回應受 4 MiB 限制。一般列表每頁最多 500 筆，特寬列自動降低頁容量並明示；不靜默截斷全資料。目標姓名選單僅顯示 80 字預覽，完整內容保留於用戶資料。排序暫存採固定短鍵、4 MiB 寫入批次，分頁只取得記錄識別碼，避免重複備註字串放大記憶體。匯入進度節流約 150 ms 一次。
 
@@ -85,7 +85,7 @@ legacy 模式隱藏目標／日期控制區、網路入口與網路 PDF，使用
 
 日期、排序、排行模式、時段草稿與套用、縣市選擇及備註沿用 `app.js` 狀態／事件，透過小型 bridge 傳遞查詢條件與渲染元件。完整資料集的異常日期筆數保存在 metadata，避免依目前頁面或已篩選摘要誤報。投單在首次開啟時分頁取得整批不重複電話；匯入與匯出都有取消按鈕。
 
-以下是既有小檔 parser 的相容流程與欄位規則；一般匯入採用前述 Worker/IndexedDB 儲存，獨立多門號位置仍使用記憶體 workspace。
+以下是既有小檔 parser 的相容流程與欄位規則；一般匯入與獨立多門號位置均採用前述 Worker/IndexedDB 儲存。
 
 台灣大哥大 XML 展平 XLSX 以查詢日期、文號、電信業者、電話號碼、始話日期時間、通話時間、通話類別、目標電話、對象電話、順序、基地台編號及基地台位置識別，來源為 `taiwan_mobile_flat_call_xlsx`，維持 legacy。相同通聯欄位且遞增的基地台順序續列附加到原記錄；順序重新起始則保留為獨立通聯。查詢 metadata 去重合併，數值 IMEI 使用 raw cell，異常日期保留原文與無內容警告。合併用戶欄位按原版 `、` 分隔去重，避免同批來源重複值。
 
@@ -102,7 +102,7 @@ legacy 模式隱藏目標／日期控制區、網路入口與網路 PDF，使用
 
 同一次選取的所有成功檔案合併成一個 workspace；部分失敗仍保留成功項目並顯示失敗狀態，全部失敗則不改變現有資料。下一批只要至少一檔成功，就以該批合併結果取代目前 workspace。合併時重算摘要、電話統計、時間分布及基地台；同名 `subject` 欄位的不同非空值去重後以 `、` 合併。
 
-「多門號位置」的專用 file input 也沿用 `parseImportFile` 與 `mergeWorkspaces`，但成功結果只寫入 `multiLocationWorkspace`。部分失敗時仍比對成功檔案；全部失敗保留上一批專用資料。一般 `currentWorkspace`、日期範圍、附卷、workspace JSON 與電話投單均不受影響；切換到此 view 時暫時隱藏側欄的一般匯入與時間篩選，離開即恢復。
+「多門號位置」由專用 `PhoneDatasetClient` 呼叫 `importLocations`，沿用一般格式解析及分批寫入。支援多選與 `webkitdirectory` 遞迴資料夾選取，處理 XML／XLSX／workspace JSON，略過其他副檔名。部分失敗使用成功檔案；新批次解析及比對完成後才啟用，全部失敗、取消或配額不足保留上一批。一般資料集、日期、附卷與電話投單各自獨立；切換到此 view 時暫時隱藏一般匯入與時間篩選。
 
 XLSX 會先檢查所有工作表前 80 列是否包含中華電信地檢新版標題；只有這個格式會先移除標題內空白後再比對。識別欄位為 `CDR類別`、`主叫號碼`、`查詢狀態`、`受叫號碼`、`始話日期時間`、`通話秒數`、`IMEI`、`指定轉接`、`起始基地台-地址/終止基地台-地址`。命中後回傳：
 
@@ -154,6 +154,7 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
   },
   records: [],
   base_stations: [],
+  subjects: [{ phone, subject, source_file, source_sheet, row_number }],
   parse_warnings: []
 }
 ```
@@ -166,6 +167,8 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
   call_type, direction, target_phone, counterparty_phone,
   imei, imsi, external_ip, internal_ip,
   upload_bytes, download_bytes, total_bytes,
+  base_connected_at, internet_connected_at,
+  base_duration_seconds, internet_duration_seconds, location_time_source,
   note, base_refs
 }
 ```
@@ -173,6 +176,12 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 `source_files` 是本批所有來源檔名的去重清單；每筆新 record 以可選的 `source_file`、`source_sheet` 保留來源。載入舊 workspace JSON 時若沒有這些欄位，會從 `case.source_file` 與 `case.sheet_name` 補齊，因此介面向後相容。`direction` 可明確指定 `inbound` 或 `outbound`。`computePhoneStats` 優先使用明確方向；舊格式沒有方向時仍由既有 `call_type` 邏輯推導。電話正規化為數字並處理 `886` 國碼。
 
 ### Base station
+
+新增 `taiwan_mobile_network_xml`／`taiwan_mobile_network_xlsx` 識別台哥大中文網路欄位，先於共享通話容器判定。XLSX 可有前置查詢資訊、重複標題及多工作表；含原始明細的分析展開表按「來源 XML＋原始紀錄序號」還原，忽略配對／結論欄位。摘要表明確拒絕。`subjects` 保留空報表及逐門號來源，用戶資訊不錯配至另一個門號，舊 `case.subject` 繼續相容。JSON 正規化及分卷保留此清單與時鐘欄位。
+
+新網路記錄優先以有效基地台連線時間設定 `occurred_at` 及 `location_time_source: 'base'`；缺值／無效時以有效 internet 時間備援並標記 `'internet'`。兩者均無有效值時保留原文供排除判定。既有通聯使用 `'record'`。明細顯示時間來源，避免誤認為基地台精確時間。
+
+舊 JSON 沒有 `subjects` 時會從 `case.subject` 的六種既有門號欄位及記錄建立關聯；先分割合併值再正規化，不把多門號串成單一門號。可明確歸屬的單一門號保留用戶資訊，含多門號的模糊合併身份另列未辨識，各真實門號仍可搜尋。
 
 基地台以 `station_key` 去重，保存 `cell_id`、原始/正規化地址、狀態與虛擬標記；記錄透過帶角色的 `base_refs` 參照。
 
@@ -197,6 +206,12 @@ Order 通聯類型依來源 XSL 語意顯示：`O`、`T`、`I`、`1`、`2`、`9`
 ```
 
 ## 7. 畫面與本機輸出
+
+### 有界位置比對與整批門號卡片
+
+`location-store.js` 建立按資料集、行政區、時間排序的位置事件索引，使用落盤門號計數與滑動視窗，保留既有同區、不同門號、包含端點 30 分鐘及最大視窗規則。資料以有界批次寫入；結果保存邊界與計數，來源明細及完整門號按需讀取，避免複製密集視窗的所有記錄。`locationPage`、`locationDetails`、`locationPhones` 每頁最多 500 筆／4 MiB；概要最多預覽 8 個門號。舊純函式 `computeMultiNumberLocationMatches` 作為小資料比較基準，上段 `source_records` 是該函式的回傳介面。
+
+`phoneCards` 列出資料集內全部門號（含只有用戶資料或缺少用戶資料的門號），搜尋門號／姓名，每頁 20 張；缺少門號另列未辨識。一般用戶頁的卡片為整批名單，原摘要繼續依目前門號及日期計算。`phoneCardDetails` 按門號／欄位／值去重，相異值及各自來源均保留；先顯示來源預覽，`phoneCardSources` 分頁讀取完整來源。兩個畫面各有獨立的卡片狀態。
 
 - `renderTwoWayCalls`：顯示來源檔案、通聯搜尋、全資料排序、欄寬、備註與每頁 500 筆分頁；先套用全域日期，再對結果搜尋、排序，條件改變時回到第一頁，沒有靜默筆數截斷。
 - `renderProfileView`：subject 保留完整案件欄位，摘要與 IMEI 清單依全域日期重新計算。
@@ -236,7 +251,7 @@ XLSX 增加「網路歷程」，PDF 增加 network。明細卷明確標示只統
 
 legacy 模式附卷使用完整批次與日期範圍，網路種類記錄保留於原通聯明細，XLSX 維持六張工作表，摘要統計完整記錄與總秒數；multi 模式才拆分網路明細與目標範圍。兩種模式的熱點摘要百分比分母都為範圍內記錄數，與明細卷及畫面一致。JSON `case.source_formats` 隨分卷保留，重新匯入時讀取原始 case 來源資訊後再套用既有正規化，以免遺失介面模式。
 
-同源 `localStorage` 保存既有介面偏好、電話備註、主題與側欄狀態；不保存通聯記錄。一般資料僅存上述工作階段 IndexedDB；新介面的日期、頁码、排序、時段、縣市條件及多門號位置 workspace/結果仍在記憶體。只有主動匯出才產生下載檔。
+同源 `localStorage` 保存既有介面偏好、電話備註、主題與側欄狀態；不保存通聯記錄。一般及多門號位置的原始資料、索引及結果存於各自工作階段 IndexedDB；日期、頁碼、排序、時段、縣市及展開狀態在記憶體。只有主動匯出才產生下載檔。
 
 ## 9. 隱私與信任邊界
 
@@ -248,7 +263,7 @@ legacy 模式附卷使用完整批次與日期範圍，網路種類記錄保留�
 - `.gitignore`、CI 敏感副檔名檢查及部署白名單形成三層防護。
 - 完整支援格式清單與發布日誌只保存在 repository 上一層的本機 `supported-formats.md`、`update.md`；它們不屬於 Git 工作樹，也不會進入 Pages artifact。
 
-任何真實通聯檔、內容、衍生識別資訊、workspace、投單 CSV、設定匯出、含個資截圖或日誌，都不得加入 Git、Actions artifact、文件或任何外部服務。多門號位置的 `source_records` 只存在瀏覽器記憶體與目前畫面，不加入一般 workspace schema 或任何匯出。真實檔只能從 repository 外在本機記憶體中驗證，測試輸出限各驗證階段的通過/失敗，不輸出檔名、內容或筆數。
+任何真實通聯檔、內容、衍生識別資訊、workspace、投單 CSV、設定匯出、含個資截圖或日誌，都不得加入 Git、Actions artifact、文件或任何外部服務。多門號位置事件與來源明細只存在瀏覽器工作階段 IndexedDB 與目前畫面，不上傳。真實檔只能從 repository 外在本機隔離環境中驗證，測試輸出限各驗證階段的通過/失敗，不輸出檔名、內容或筆數。
 
 ## 10. 測試
 
@@ -263,6 +278,8 @@ legacy 模式附卷使用完整批次與日期範圍，網路種類記錄保留�
 `tests/browser/import-landing.test.js` 使用合成多電話 XLSX、legacy XLSX 與 JSON，驗證主流程及舊版相容流程匯入後開啟時間分布圖、導覽選取與 24 小時統計更新，以及部分成功／全部失敗。既有列表與選擇性相容性測試先明確切至通聯列表；大型合成測試先驗證預設時間圖，再驗證列表分頁與匯出取消。
 
 ## 11. GitHub Pages 部署
+
+2026-10-08 新增 `tests/network-formats.test.js`、`tests/location-store.test.js`、瀏覽器 `multi-location.test.js`，驗證新格式、subjects／時鐘往返、密集視窗、跨區排序、寬欄位與來源、延遲明細、有界頁面及失敗／取消採用邊界。`PRIVATE_NETWORK_ROOT`／`PRIVATE_NETWORK_XML_FOLDER` 啟用本機逐檔及資料夾驗證；`PHONE_LOCATION_PERF=1` 啟用 10 萬筆合成位置測試。一般及大量測試結果見當日驗證文件；私密輸出限階段 PASS／FAIL。
 
 `.github/workflows/pages.yml` 在 `main` push 或手動觸發時：
 
@@ -283,6 +300,8 @@ legacy 模式附卷使用完整批次與日期範圍，網路種類記錄保留�
 修改前：完整閱讀本文件、確認私密檔在 repository 外、檢查工作樹。修改後：更新本文件、以合成資料測試、以無內容輸出的方式驗證真實檔、檢查 Git index/歷史/部署白名單與網路請求，並新增異動紀錄。
 
 ## 14. 異動紀錄
+
+- 2026-10-08：新增台哥大中文網路 XML／XLSX、原始明細展開 XLSX 還原與時鐘來源保存；多門號位置改用獨立 Worker／IndexedDB，支援資料夾大量匯入、有界比對及明細分頁。兩頁加入整批門號卡片、搜尋、20 張分頁與欄位／來源展開；一般匯入仍顯示時間分布圖。發布版本為 `20261008-network-location-v1`，驗證紀錄見 `docs/verification-2026-10-08.md`。
 
 - 2026-09-16：一般檔案與 workspace JSON 匯入成功後預設顯示「時間分布圖」，同步更新 Worker 資料集與舊版相容匯入流程；新增匯入首頁及圖表資料回歸測試，調整既有列表測試的明確導覽。Node 65 項、一般瀏覽器 15 項與 Edge 10 萬／20 萬筆時間圖測試通過，紀錄見 `docs/verification-2026-09-16.md`。發布版本為 `20260916-import-hours-v1`。
 

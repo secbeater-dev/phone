@@ -48,6 +48,7 @@ jobs:
           mkdir -p _site
           cp .nojekyll 404.html admin.html app.js attachment-export.js import-parser.js index.html styles.css _site/
           cp cdr-model.js streaming-xlsx.js dataset-client.js dataset-worker.js dataset-store.js dataset-ui.js dataset-report.js _site/
+          cp location-store.js phone-cards-ui.js multi-location-ui.js _site/
           mkdir -p _site/assets _site/vendor/licenses
           cp assets/Beater_icon.png assets/vehicle-id.jpg assets/shrimp-shell.jpg _site/assets/
           cp vendor/xlsx.full.min.js vendor/exceljs.min.js vendor/pdf-lib.min.js \

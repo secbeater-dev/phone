@@ -1,18 +1,19 @@
 /* All data processing remains inside this same-origin dedicated worker. */
 importScripts(
-  './vendor/zip-no-worker-inflate-2.7.57.min.js?v=20260916-import-hours-v1', './vendor/sax-1.4.1.js?v=20260916-import-hours-v1',
-  './cdr-model.js?v=20260916-import-hours-v1', './streaming-xlsx.js?v=20260916-import-hours-v1',
-  './dataset-store.js?v=20260916-import-hours-v1', './dataset-report.js?v=20260916-import-hours-v1'
+  './vendor/zip-no-worker-inflate-2.7.57.min.js?v=20261008-network-location-v1', './vendor/sax-1.4.1.js?v=20261008-network-location-v1',
+  './cdr-model.js?v=20261008-network-location-v1', './streaming-xlsx.js?v=20261008-network-location-v1',
+  './dataset-store.js?v=20261008-network-location-v1', './location-store.js?v=20261008-network-location-v1', './dataset-report.js?v=20261008-network-location-v1'
 );
 let store, queue = Promise.resolve(), legacyLoaded = false, xlsxLoaded = false, pdfLoaded = false;
 const jobs = new Map();
 function legacy() {
   if (!legacyLoaded) {
-    importScripts('./vendor/xlsx.full.min.js?v=20260916-import-hours-v1', './attachment-export.js?v=20260916-import-hours-v1', './app.js?v=20260916-import-hours-v1');
+    importScripts('./vendor/xlsx.full.min.js?v=20261008-network-location-v1', './attachment-export.js?v=20261008-network-location-v1', './app.js?v=20261008-network-location-v1');
     legacyLoaded = true;
   }
 }
 function safeError(error) {
+  if (error.code === 'UNSUPPORTED_SUMMARY_WORKBOOK') return '摘要工作簿缺少原始紀錄欄位，請使用原始或詳細工作簿。';
   if (error.name === 'AbortError') return '已取消處理。';
   if (error.name === 'QuotaExceededError') return '本機暫存空間不足。請清除不需要的網站資料或釋放磁碟空間後重試。';
   return error.publicMessage || '檔案格式不符、資料損壞或本機儲存失敗；原有資料未變更。';
@@ -56,23 +57,24 @@ async function importOne(file, id, signal, progress) {
         if (!parsed.case || !Array.isArray(parsed.records)) throw publicError('不是支援的 workspace JSON。');
         sourceCase = parsed.case;
         workspace = PhoneWorkbench.normalizeWorkspace(parsed);
-        subjects = Array.isArray(parsed.subjects) ? parsed.subjects : null;
+        subjects = Array.isArray(workspace.subjects) ? workspace.subjects : null;
       } else {
         workspace = PhoneWorkbench.parseImportFile(file.name, await file.arrayBuffer());
         sourceCase = workspace.case;
+        subjects = Array.isArray(workspace.subjects) ? workspace.subjects : null;
       }
       PhoneDatasetStore.check(signal);
       const stations = new Map((workspace.base_stations || []).map(s => [s.station_key, s]));
       for (let i = 0; i < workspace.records.length; i += 1000) {
         PhoneDatasetStore.check(signal);
-        await store.appendRecords(id, workspace.records.slice(i, i + 1000).map(row => ({ ...row, target_phone: PhoneCdrModel.normalizePhone(row.target_phone), record_kind: PhoneCdrModel.kindOf(row), stations: (row.base_refs || []).map(ref => stations.get(ref.station_key)).filter(Boolean) })));
+        await store.appendRecords(id, workspace.records.slice(i, i + 1000).map(row => ({ ...row, target_phone: PhoneCdrModel.normalizePhone(row.target_phone), record_kind: PhoneCdrModel.kindOf(row), stations: [...new Map([...(row.stations || []), ...(row.base_refs || []).map(ref => stations.get(ref.station_key)).filter(Boolean)].map(station => [station.station_key, station])).values()] })));
         progress({ stage: '寫入本機暫存', processedRows: Math.min(i + 1000, workspace.records.length) });
       }
       const phones = [...new Set(workspace.records.map(r => PhoneCdrModel.normalizePhone(r.target_phone)))];
       if (subjects) {
         for (let i = 0; i < subjects.length; i += 500) {
           PhoneDatasetStore.check(signal);
-          await store.appendUsers(id, subjects.slice(i, i + 500).map(row => ({ ...row, phone: PhoneCdrModel.normalizePhone(row.phone) })));
+          await store.appendUsers(id, subjects.slice(i, i + 500).map(row => ({ ...row, phone: PhoneCdrModel.normalizePhone(row.phone), source_file: row.source_file || file.name, carrier: row.carrier || workspace.case.carrier || '' })));
         }
       } else {
         const subject = workspace.case.subject || {};
@@ -80,7 +82,7 @@ async function importOne(file, id, signal, progress) {
         const phone = explicit.length === 1 ? explicit[0] : phones.length === 1 ? phones[0] : '';
         if (Object.keys(subject).length) await store.appendUsers(id, [{ phone, subject, source_file: file.name, source_sheet: workspace.case.sheet_name || '', row_number: 0 }]);
       }
-      summary = { source_file: file.name, source_files: [file.name], source_format: workspace.case.source_format, sheet_name: workspace.case.sheet_name, warning_count: workspace.parse_warnings?.length || 0, ...sourceMetadata(sourceCase) };
+      summary = { source_file: file.name, source_files: [file.name], carrier: workspace.case.carrier || '', source_format: workspace.case.source_format, sheet_name: workspace.case.sheet_name, warning_count: workspace.parse_warnings?.length || 0, ...sourceMetadata(sourceCase) };
     }
     return await store.finish(id, summary);
   } catch (error) { await store.remove(id).catch(() => {}); throw error; }
@@ -89,12 +91,15 @@ async function importOne(file, id, signal, progress) {
 async function importBatch(files, signal, progress) {
   const datasets = [], results = [];
   try {
+    const estimate = await navigator.storage?.estimate?.();
+    const required = Math.max(128 * 1024 * 1024, files.reduce((sum, file) => sum + Number(file.size || 0), 0) * 5);
+    if (estimate?.quota && estimate.quota - (estimate.usage || 0) < required) throw new DOMException('Insufficient local storage', 'QuotaExceededError');
     for (let index = 0; index < files.length; index++) {
       PhoneDatasetStore.check(signal);
       const file = files[index], id = crypto.randomUUID();
       const report = value => progress({ ...value, fileName: file.name, fileIndex: index + 1, fileCount: files.length });
       try { const dataset = await importOne(file, id, signal, report); datasets.push(dataset); results.push({ ok: true, fileName: file.name, format: dataset.source_format }); }
-      catch (error) { if (error.name === 'AbortError') throw error; results.push({ ok: false, fileName: file.name, message: safeError(error) }); }
+      catch (error) { if (error.name === 'AbortError' || error.name === 'QuotaExceededError') throw error; results.push({ ok: false, fileName: file.name, message: safeError(error) }); }
     }
     if (!datasets.length) throw publicError(results[0]?.message || '所有檔案匯入失敗，原有資料未變更。');
     let dataset = datasets[0];
@@ -123,6 +128,21 @@ async function handle(op, payload, signal, progress) {
   if (op === 'init') { store?.close(); store = await PhoneDatasetStore.open(payload.sessionId); await store.recover(payload.retainId); return true; }
   if (!store) throw publicError('本機暫存尚未初始化，請重新整理。');
   if (op === 'importBatch') return importBatch(payload.files, signal, progress);
+  const locations = new PhoneLocationStore.LocationStore(store);
+  if (op === 'importLocations') {
+    const imported = await importBatch(payload.files, signal, progress);
+    try {
+      legacy();
+      const analysis = await locations.analyze(imported.dataset.id, { signal, classify: PhoneWorkbench.classifyTaiwanAdministrativeArea, normalizePhone: PhoneWorkbench.normalizePhoneText, onProgress: progress });
+      return { ...imported, dataset: await store.metadata(imported.dataset.id), analysis };
+    } catch (error) { await store.remove(imported.dataset.id).catch(() => {}); throw error; }
+  }
+  if (op === 'locationPage') return locations.locationPage(payload.datasetId, payload.page);
+  if (op === 'locationDetails') return locations.locationDetails(payload.datasetId, payload.matchId, payload.page);
+  if (op === 'locationPhones') return locations.locationPhones(payload.datasetId, payload.matchId, payload.page);
+  if (op === 'phoneCards') { await locations.buildCards(payload.datasetId, { signal }); return locations.phoneCards(payload.datasetId, payload.search, payload.page); }
+  if (op === 'phoneCardDetails') return locations.phoneCardDetails(payload.datasetId, payload.phone, payload.page);
+  if (op === 'phoneCardSources') return locations.phoneCardSources(payload.datasetId, payload.phone, payload.name, payload.value, payload.page);
   if (op === 'targets') return store.targets(payload.datasetId, payload.options);
   if (op === 'users') return store.users(payload.scope, payload.options);
   if (op === 'page') return store.page(payload.scope, payload.options, signal);
@@ -176,10 +196,10 @@ async function handle(op, payload, signal, progress) {
     legacy();
     PhoneDatasetStore.check(signal);
     if (payload.format === 'xlsx') {
-      if (!xlsxLoaded) { importScripts('./vendor/exceljs.min.js?v=20260916-import-hours-v1'); xlsxLoaded = true; }
+      if (!xlsxLoaded) { importScripts('./vendor/exceljs.min.js?v=20261008-network-location-v1'); xlsxLoaded = true; }
       return { bytes: await PhoneAttachmentExport.createAttachmentXlsx(payload.report, ExcelJS), mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
     }
-    if (!pdfLoaded) { importScripts('./vendor/pdf-lib.min.js?v=20260916-import-hours-v1', './vendor/fontkit.umd.min.js?v=20260916-import-hours-v1', './vendor/open-huninn-data.js?v=20260916-import-hours-v1'); pdfLoaded = true; }
+    if (!pdfLoaded) { importScripts('./vendor/pdf-lib.min.js?v=20261008-network-location-v1', './vendor/fontkit.umd.min.js?v=20261008-network-location-v1', './vendor/open-huninn-data.js?v=20261008-network-location-v1'); pdfLoaded = true; }
     const binary = atob(PhoneExportFontBase64), font = Uint8Array.from(binary, c => c.charCodeAt(0));
     return { bytes: await PhoneAttachmentExport.createAttachmentPdf(payload.report, payload.section, PDFLib, fontkit, font), mime: 'application/pdf' };
   }

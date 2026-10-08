@@ -633,7 +633,7 @@ test("HTML uses pinned local scripts and contains no analytics tag", () => {
   assert.match(styles, /\.import-progress-card\s*\{/);
   assert.match(html, /data-view="multiLocation"[^>]*>[\s\S]*?多門號位置<\/strong>/);
   assert.match(html, /id="mainImportPanel" class="sidebar-panel"/);
-  assert.match(html, /id="multiLocationFileInput"[^>]+accept="\.xlsx,\.xml" multiple/);
+  assert.match(html, /id="multiLocationFileInput"[^>]+accept="\.xlsx,\.xml,\.json" multiple/);
   assert.match(html, /id="multiLocationView" class="view"/);
   assert.match(html, /id="multiLocationRows"/);
   assert.match(html, /<th>原始資料<\/th>/);

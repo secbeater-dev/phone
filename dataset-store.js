@@ -91,9 +91,24 @@
   }
   async function open(sessionId) {
     const name = PREFIX + sessionId;
-    const req = indexedDB.open(name, 1);
+    const req = indexedDB.open(name, 4);
     req.onupgradeneeded = () => {
       const db = req.result;
+      for (const name of ['locationEvents','locationCounts','locationMatches','cardFields','cardSources']) {
+        if (!db.objectStoreNames.contains(name)) {
+          const table = db.createObjectStore(name, { keyPath: ['dataset_id','key'] });
+          if (name === 'locationEvents') table.createIndex('ordered',['dataset_id','area','time','phone','seq']);
+          if (name === 'locationMatches') table.createIndex('ordered',['dataset_id','start_at','county_rank','district_order','key']);
+        }
+      }
+      const locationMatches = req.transaction.objectStore('locationMatches');
+      const locationCounts = req.transaction.objectStore('locationCounts');
+      if (!locationCounts.indexNames.contains('positivePhones')) locationCounts.createIndex('positivePhones',['dataset_id','area','positive','phone']);
+      if (locationMatches.index('ordered').keyPath.includes('district')) {
+        locationMatches.deleteIndex('ordered');
+        locationMatches.createIndex('ordered',['dataset_id','start_at','county_rank','district_order','key']);
+      }
+      if (db.objectStoreNames.contains('datasets')) return;
       db.createObjectStore('datasets', { keyPath: 'id' });
       const records = db.createObjectStore('records', { keyPath: ['dataset_id', 'seq'] });
       records.createIndex('datasetTime', ['dataset_id', 'time_key', 'seq']);
@@ -130,6 +145,10 @@
     }
     async appendUsers(id, rows) {
       if (!rows.length) return;
+      let bytes = 0, end = 0;
+      while (end < rows.length && end < BATCH && bytes + encodedSize(rows[end]) <= READ_BYTES - 4096) bytes += encodedSize(rows[end++]);
+      if (!end) throw new Error('A single user exceeds the local storage batch limit');
+      if (end < rows.length) { await this.appendUsers(id, rows.slice(0, end)); return this.appendUsers(id, rows.slice(end)); }
       const tx = this.db.transaction(['users', 'targets', 'datasets'], 'readwrite'), done = finished(tx);
       done.catch(() => {});
       const metaRequest = request(tx.objectStore('datasets').get(id));
@@ -155,6 +174,10 @@
     }
     async appendRecords(id, rows) {
       if (!rows.length) return;
+      let bytes = 0, end = 0;
+      while (end < rows.length && end < BATCH && bytes + encodedSize(rows[end]) <= READ_BYTES - 1024) bytes += encodedSize(rows[end++]);
+      if (!end) throw new Error('A single record exceeds the local storage batch limit');
+      if (end < rows.length) { await this.appendRecords(id, rows.slice(0, end)); return this.appendRecords(id, rows.slice(end)); }
       const tx = this.db.transaction(['datasets', 'records', 'targets'], 'readwrite'), done = finished(tx);
       done.catch(() => {});
       const metaReq = request(tx.objectStore('datasets').get(id));
@@ -424,6 +447,7 @@
     }
     async remove(id) {
       for (const name of ['records', 'targets', 'strings']) await this.deleteRange(name, prefixRange([id]));
+      for (const name of ['locationEvents','locationCounts','locationMatches','cardFields','cardSources']) await this.deleteRange(name, IDBKeyRange.bound([id],[id,[[]]]));
       await this.deleteRange('users', prefixRange([id]), 'datasetTarget');
       const tx = this.db.transaction(['datasets', 'sorts', 'aggregates', 'summaries'], 'readwrite'), done = finished(tx);
       tx.objectStore('datasets').delete(id);

@@ -5,8 +5,11 @@
   const number = value => Number(value || 0).toLocaleString();
   const state = { enabled: false, dataset: null, client: null, starting: null, target: '', view: 'calls', page: 1, targetPage: 1, search: '', sort: { column: 'occurred_at', direction: 'asc' }, date: { active: false }, hours: null, counties: null, mode: 'count', revision: 0, busy: false, exporting: false };
   let bridge;
+  let batchCards;
   function init(api) {
     bridge = api;
+    batchCards = root.PhoneCardsUI?.create($('profileBatchCards'));
+    batchCards?.render();
     const toolbar = document.createElement('section');
     toolbar.id = 'datasetToolbar'; toolbar.className = 'panel dataset-toolbar'; toolbar.hidden = true;
     toolbar.innerHTML = `<div class="dataset-target-group"><label for="datasetTargetSearch">目標電話</label><input id="datasetTargetSearch" type="search" placeholder="搜尋電話或用戶名稱" autocomplete="off"><select id="datasetTarget" aria-label="選擇目標電話"></select><div class="dataset-target-pages"><button type="button" id="datasetTargetPrev" class="ghost-button compact-action">上一組</button><small id="datasetTargetCount"></small><button type="button" id="datasetTargetNext" class="ghost-button compact-action">下一組</button></div></div><div class="dataset-date-group"><label for="datasetStart">起始日期</label><input id="datasetStart" type="date"><label for="datasetEnd">結束日期</label><input id="datasetEnd" type="date"><button id="datasetDateApply" class="secondary-button" type="button">套用日期</button><button id="datasetDateReset" class="ghost-button" type="button">完整日期</button></div><div class="dataset-scope-line"><strong id="datasetScope"></strong><button id="datasetClear" class="ghost-button" type="button">清除本次資料</button></div><p id="datasetStatus" class="message" role="status" aria-live="polite"></p>`;
@@ -98,6 +101,7 @@
       const old = state.dataset;
       state.dataset = result.dataset; state.page = 1; state.targetPage = 1; state.search = ''; state.date = { active: false }; state.hours = null; state.counties = null;
       service.activate(state.dataset.id);
+      batchCards?.setDataset(service, state.dataset.id);
       state.sort = { column: 'occurred_at', direction: 'asc' }; $('datasetTargetSearch').value = '';
       bridge.adoptDataset(state.dataset); state.hotSummary = null; state.summary = null; state.target = '';
       fillDates(); if (targets) showTargets(targets, true); else $('datasetTarget').innerHTML = '';
@@ -186,6 +190,7 @@
         $('datasetContent').innerHTML = heading('網路歷程') + searchBox('搜尋時間、電話、IMEI、IP、備註或來源') + table(cols.map(([key,label])=>key==='stations'?label:`<button class="table-sort-button" data-dataset-sort="${key}" type="button">${label}</button>`),result.rows.map(row=>cols.map(([key])=>key==='stations'?esc((row.stations || []).map(s=>s.address || s.cell_id).join('；')):key==='source_file'?esc(`${row.source_file || ''} / ${row.source_sheet || ''} / 第 ${row.row_number || ''} 列`):esc(row[key] ?? '')))) + pager(result.total,state.page,result.pageSize);
         if (focused) { $('datasetSearch').focus(); if (cursor != null) $('datasetSearch').setSelectionRange(cursor,cursor); }
       } else if (view === 'profile') {
+        batchCards?.render();
         const summary = await query('summary', { scope: queryScope });
         const users = await query('users', { scope: queryScope, options: { page: state.page } });
         const imeis = await query('aggregate', { queryKey: summary.queryKey, group: 'imei', options: { page: state.page, mode: 'key' } });
@@ -272,6 +277,7 @@
       if (state.dataset) await state.client.request('remove', { datasetId: state.dataset.id });
       state.dataset = null; state.target = ''; $('datasetTarget').innerHTML = ''; $('datasetScope').textContent = '';
       state.client?.activate(null);
+      batchCards?.setDataset(null, null); batchCards?.render();
       bridge.adoptDataset(null); state.summary = null; state.hotSummary = null;
       document.querySelectorAll('.view').forEach(node=>node.removeAttribute('aria-busy'));
       for (const view of ['profile','stats','hours']) { const node=$(`dataset-${view}-pages`); node.innerHTML=''; node.hidden=true; }

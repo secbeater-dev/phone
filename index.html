@@ -4,10 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT' 'sha384-15400o7achiVrXywgO3RTR6MC09CIMqnGUj701AjYevx1UvEXQs+YUPLx9HOVvgY' 'sha384-j1WUgUxW27N4NdMkiYY95Vw9ARXCv+F6cIntMY/wWkbDUZl/oZVP5KlLkeAgANF6' 'sha384-YfwVLWUAiBlG5h6B81yDlXxZRpjy57lC9UJqBF/b9EndyffbDqR1lAG1glwryiFh' 'sha384-JaGaVD4XrjA3XSciTi3HVcNn7IlihXJmwmpji3jCr6pzRD2Tglsdu2IYPwshm0a/' 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' 'sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn' 'sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'self'; media-src 'none'; manifest-src 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT' 'sha384-15400o7achiVrXywgO3RTR6MC09CIMqnGUj701AjYevx1UvEXQs+YUPLx9HOVvgY' 'sha384-4yWWkvvbPT7LEv4YN0IK+p7vkJwIMNR1rAEkj4SN4g7/FQ03/BZOXetIbbAYRZxW' 'sha384-Nkn68UnXJF3Rqqc9HJyk+KOCzuhc6yu2XKkv472SlrelpAEQDCb0ebT3humkd9dR' 'sha384-vCDMYbgB4UwejmbF/ndo10tq45x0HtniYqVbKfz6/e2nXVo4KZ/GHlrPAw+Ugcp+' 'sha384-dck2mhY2KXrqPuKtZD6Vma0Dr9y0mOvQ4WoPS2nE8pu+gPFSL0TDx6ZdjoqBH+/V' 'sha384-thV6DhiWem1qxGRR6EqB82woqoxPhMTDmnjyK0H8CtX/VuA9fca3AtJugiG6TzVl' 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' 'sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn' 'sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou'; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'self'; media-src 'none'; manifest-src 'none'" />
     <title>通聯資料分析工具</title>
     <link rel="icon" type="image/png" href="./assets/Beater_icon.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260916-import-hours-v1" />
+    <link rel="stylesheet" href="./styles.css?v=20261008-network-location-v1" />
   </head>
   <body>
     <div class="app-shell">
@@ -134,8 +134,9 @@
         </section>
 
         <section id="profileView" class="view">
+          <section id="profileBatchCards" class="panel"></section>
           <section class="panel">
-            <div class="section-title"><h2>用戶資料</h2></div>
+            <div class="section-title"><div><h2>目前範圍的用戶摘要</h2><p class="muted">以下統計依目前選取門號與日期範圍計算。</p></div></div>
             <div class="metric-row profile-summary-grid" id="profileSummaryCards"></div>
             <dl id="profileContent" class="detail-list"></dl>
             <section class="profile-imei-section">
@@ -168,16 +169,20 @@
             <div class="section-title">
               <div>
                 <h2>資料匯入</h2>
-                <p class="muted">選取多份通聯檔，在瀏覽器本機比對不同調閱門號的位置。</p>
+                <p class="muted">選取多份檔案或整個資料夾，比對不同門號的位置。支援 XML、XLSX 與 workspace JSON；資料夾內其他檔案會略過。</p>
               </div>
               <div class="inline-actions">
-                <input id="multiLocationFileInput" class="file-input-hidden" type="file" accept=".xlsx,.xml" multiple />
+                <input id="multiLocationFileInput" class="file-input-hidden" type="file" accept=".xlsx,.xml,.json" multiple />
+                <input id="multiLocationFolderInput" class="file-input-hidden" type="file" accept=".xlsx,.xml,.json" webkitdirectory multiple />
                 <button id="multiLocationImportButton" class="multi-location-primary-button" type="button">選擇多檔匯入</button>
+                <button id="multiLocationFolderButton" class="secondary-button" type="button">選擇資料夾</button>
+                <button id="multiLocationCancel" class="secondary-button" type="button" hidden>取消匯入</button>
               </div>
             </div>
             <p id="multiLocationImportStatus" class="message" role="status" aria-live="polite">尚未匯入多門號位置資料。</p>
             <div id="multiLocationImportResults" class="import-results"></div>
           </section>
+          <section id="multiLocationCards" class="panel"></section>
           <section class="panel multi-location-list-panel">
             <div class="section-title">
               <div>
@@ -362,10 +367,12 @@
         <div class="import-progress-track" aria-hidden="true"><span id="importProgressFill"></span></div>
       </div>
     </section>
-    <script src="./vendor/xlsx.full.min.js?v=20260916-import-hours-v1" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
-    <script src="./attachment-export.js?v=20260916-import-hours-v1" integrity="sha384-15400o7achiVrXywgO3RTR6MC09CIMqnGUj701AjYevx1UvEXQs+YUPLx9HOVvgY" crossorigin="anonymous"></script>
-    <script src="./dataset-client.js?v=20260916-import-hours-v1" integrity="sha384-j1WUgUxW27N4NdMkiYY95Vw9ARXCv+F6cIntMY/wWkbDUZl/oZVP5KlLkeAgANF6" crossorigin="anonymous"></script>
-    <script src="./dataset-ui.js?v=20260916-import-hours-v1" integrity="sha384-YfwVLWUAiBlG5h6B81yDlXxZRpjy57lC9UJqBF/b9EndyffbDqR1lAG1glwryiFh" crossorigin="anonymous"></script>
-    <script src="./app.js?v=20260916-import-hours-v1" integrity="sha384-JaGaVD4XrjA3XSciTi3HVcNn7IlihXJmwmpji3jCr6pzRD2Tglsdu2IYPwshm0a/" crossorigin="anonymous"></script>
+    <script src="./vendor/xlsx.full.min.js?v=20261008-network-location-v1" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
+    <script src="./attachment-export.js?v=20261008-network-location-v1" integrity="sha384-15400o7achiVrXywgO3RTR6MC09CIMqnGUj701AjYevx1UvEXQs+YUPLx9HOVvgY" crossorigin="anonymous"></script>
+    <script src="./dataset-client.js?v=20261008-network-location-v1" integrity="sha384-4yWWkvvbPT7LEv4YN0IK+p7vkJwIMNR1rAEkj4SN4g7/FQ03/BZOXetIbbAYRZxW" crossorigin="anonymous"></script>
+    <script src="./phone-cards-ui.js?v=20261008-network-location-v1" integrity="sha384-Nkn68UnXJF3Rqqc9HJyk+KOCzuhc6yu2XKkv472SlrelpAEQDCb0ebT3humkd9dR" crossorigin="anonymous"></script>
+    <script src="./multi-location-ui.js?v=20261008-network-location-v1" integrity="sha384-vCDMYbgB4UwejmbF/ndo10tq45x0HtniYqVbKfz6/e2nXVo4KZ/GHlrPAw+Ugcp+" crossorigin="anonymous"></script>
+    <script src="./dataset-ui.js?v=20261008-network-location-v1" integrity="sha384-dck2mhY2KXrqPuKtZD6Vma0Dr9y0mOvQ4WoPS2nE8pu+gPFSL0TDx6ZdjoqBH+/V" crossorigin="anonymous"></script>
+    <script src="./app.js?v=20261008-network-location-v1" integrity="sha384-thV6DhiWem1qxGRR6EqB82woqoxPhMTDmnjyK0H8CtX/VuA9fca3AtJugiG6TzVl" crossorigin="anonymous"></script>
   </body>
 </html>

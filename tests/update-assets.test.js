@@ -12,6 +12,8 @@ const ENTRY_ASSETS = [
   "vendor/xlsx.full.min.js",
   "attachment-export.js",
   "dataset-client.js",
+  "phone-cards-ui.js",
+  "multi-location-ui.js",
   "dataset-ui.js",
   "app.js",
 ];
@@ -27,6 +29,7 @@ const WORKER_ASSETS = [
   "cdr-model.js",
   "streaming-xlsx.js",
   "dataset-store.js",
+  "location-store.js",
   "dataset-report.js",
   "vendor/xlsx.full.min.js",
   "attachment-export.js",
@@ -85,7 +88,7 @@ function makeFixture(t) {
   writeFixtureFile(root, "dataset-client.js", "const VERSION = '20260910-current';\r\nnew Worker('./dataset-worker.js?v=' + VERSION);\r\n");
   writeFixtureFile(root, "dataset-worker.js", [
     "importScripts('./vendor/zip-no-worker-inflate-2.7.57.min.js', './vendor/sax-1.4.1.js');",
-    "importScripts('./cdr-model.js?v=20260910-current', './streaming-xlsx.js?v=20260910-current', './dataset-store.js?v=20260910-current', './dataset-report.js?v=20260910-current');",
+    "importScripts('./cdr-model.js?v=20260910-current', './streaming-xlsx.js?v=20260910-current', './dataset-store.js?v=20260910-current', './location-store.js?v=20260910-current', './dataset-report.js?v=20260910-current');",
     "importScripts('./vendor/xlsx.full.min.js', './attachment-export.js?v=20260910-current', './app.js?v=20260910-current');",
     "importScripts('./vendor/exceljs.min.js');",
     "importScripts('./vendor/pdf-lib.min.js', './vendor/fontkit.umd.min.js', './vendor/open-huninn-data.js');",

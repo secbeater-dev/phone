@@ -17,15 +17,15 @@
     sidebarCollapsed: "phone-workbench-sidebar-collapsed",
   };
   const LOCAL_EXPORT_VERSION = "phone-workbench-local-settings-v1";
-  const RELEASE_ASSET_VERSION = "20260916-import-hours-v1";
+  const RELEASE_ASSET_VERSION = "20261008-network-location-v1";
   const CALL_PAGE_SIZE = 500;
   const MULTI_LOCATION_PAGE_SIZE = 500;
   const MULTI_LOCATION_WINDOW_MINUTES = 30;
   const ATTACHMENT_ASSETS = {
-    exceljs: { src: "./vendor/exceljs.min.js?v=20260916-import-hours-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
-    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20260916-import-hours-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
-    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20260916-import-hours-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
-    fontData: { src: "./vendor/open-huninn-data.js?v=20260916-import-hours-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
+    exceljs: { src: "./vendor/exceljs.min.js?v=20261008-network-location-v1", integrity: "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" },
+    pdfLib: { src: "./vendor/pdf-lib.min.js?v=20261008-network-location-v1", integrity: "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" },
+    fontkit: { src: "./vendor/fontkit.umd.min.js?v=20261008-network-location-v1", integrity: "sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" },
+    fontData: { src: "./vendor/open-huninn-data.js?v=20261008-network-location-v1", integrity: "sha384-upBq5rvuXmWYAJi6vO2VylcS6jMVjb7GMuvCJguhimt6kQ2uYG8eZz4GfqsI4Hou" },
   };
   const loadedAttachmentAssets = new Map();
   const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}-${String(hour + 1).padStart(2, "0")}`);
@@ -154,6 +154,7 @@
     syncTheme();
     syncSidebarCollapsed();
     bindEvents();
+    globalThis.PhoneMultiLocationUI?.init({ getNotes: () => state.phoneNotes, updateNote: updatePhoneNote });
     globalThis.PhoneDatasetUI?.init({
       getNotes: () => state.phoneNotes,
       updateNote: updatePhoneNote,
@@ -195,6 +196,7 @@
     });
     $("importButton")?.addEventListener("click", () => $("fileInput")?.click());
     $("fileInput")?.addEventListener("change", handleFileImport);
+    if (!globalThis.PhoneMultiLocationUI) {
     $("multiLocationImportButton")?.addEventListener("click", () => $("multiLocationFileInput")?.click());
     $("multiLocationFileInput")?.addEventListener("change", handleMultiLocationImport);
     $("multiLocationPrevPage")?.addEventListener("click", () => changeMultiLocationPage(-1));
@@ -207,6 +209,7 @@
       const button = event.target.closest("[data-multi-location-detail]");
       if (button) toggleMultiLocationDetail(button.dataset.multiLocationDetail);
     });
+    }
     $("dateFilterButton")?.addEventListener("click", showDateFilterModal);
     $("dateFilterCloseButton")?.addEventListener("click", hideDateFilterModal);
     $("dateFilterCancelButton")?.addEventListener("click", hideDateFilterModal);
@@ -1054,6 +1057,7 @@
   }
 
   function renderMultiLocationView() {
+    if (globalThis.PhoneMultiLocationUI) return globalThis.PhoneMultiLocationUI.render();
     const rowsTarget = $("multiLocationRows");
     if (!rowsTarget) return;
     const matches = state.multiLocationMatches || [];
@@ -1832,6 +1836,13 @@
         })),
       };
     });
+    if (sheets.some(sheet => sheet.rows.some(row => networkHeader(row.values)))) {
+      sheets.forEach(sheet => {
+        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheet.title], { header: 1, defval: '', raw: true, blankrows: false });
+        sheet.rows.forEach((row, index) => { row.rawValues = rows[index] || row.values; });
+      });
+      return parseNetworkXlsx(fileName, sheets);
+    }
     const fetOrder = fetOrderHeaders(sheets);
     if (fetOrder.length) {
       sheets.forEach((sheet) => {
@@ -1863,6 +1874,11 @@
     if (compact) return parseTwmCompact(fileName, sheets, compact);
     const fetWeb = fetWebHeaders(sheets);
     if (fetWeb) return parseFetWeb(fileName, fetWeb);
+    if (sheets.length && sheets.every(sheet => sheet.rows.every(row => row.values.length <= 3))) {
+      const error = new Error('摘要工作簿缺少原始紀錄欄位，無法匯入；請使用原始或詳細工作簿。');
+      error.code = 'UNSUPPORTED_SUMMARY_WORKBOOK';
+      throw error;
+    }
     const sheet = sheets[0] || { title: "工作表1", rows: [] };
     if (!sheet.rows.length) throw new Error("檔案沒有可讀取資料列");
     const detected = detectHeader(sheet.rows);
@@ -2169,6 +2185,7 @@
 
   function parseXmlWorkbook(fileName, xml) {
     if (isFetOrderXml(xml)) return parseFetOrderXml(fileName, xml);
+    if (/<(?:[\w.-]+:)?手機連到基地台的時間[\s>]/.test(xml) || /<(?:[\w.-]+:)?連到internet的時間[\s>]/.test(xml)) return parseNetworkXml(fileName, xml);
     if (isTwmCallXml(xml)) return parseTwmCallXml(fileName, xml);
     if (firstXmlBlock(xml, "CUSTOMERINFO") || firstXmlBlock(xml, "CELLINFO")) return parseTwmCspXml(fileName, xml);
     throw new Error("找不到支援的 XML 結構");
@@ -2241,6 +2258,7 @@
         parse_warnings: parsed.warnings || [],
       },
       records,
+      subjects: workspaceSubjects(parsed.subjects, parsed.subject, parsed.file_name, parsed.sheet_name, records),
       base_stations: stations,
       parse_warnings: parsed.warnings || [],
     };
@@ -2254,6 +2272,11 @@
       source_file: record.source_file || sourceFile || "",
       source_sheet: record.source_sheet || sourceSheet || "",
       occurred_at: record.occurred_at || "",
+      base_connected_at: record.base_connected_at || "",
+      internet_connected_at: record.internet_connected_at || "",
+      base_duration_seconds: toInt(record.base_duration_seconds),
+      internet_duration_seconds: toInt(record.internet_duration_seconds),
+      location_time_source: ['base', 'internet'].includes(record.location_time_source) ? record.location_time_source : 'record',
       ended_at: record.ended_at || "",
       duration_seconds: toInt(record.duration_seconds),
       call_type: record.call_type || "",
@@ -2274,6 +2297,7 @@
       total_bytes: toInt(record.total_bytes),
       note: record.note || "",
       base_refs: record.base_refs || [],
+      ...(Array.isArray(record.stations) ? { stations: record.stations } : {}),
     };
   }
 
@@ -2319,6 +2343,7 @@
         parse_warnings: warnings,
       },
       records,
+      subjects: workspaceSubjects(workspace.subjects, workspace.case.subject, workspace.case.source_file, workspace.case.sheet_name, records),
       base_stations: stations,
       parse_warnings: warnings,
     };
@@ -2351,6 +2376,7 @@
         parse_warnings: warnings,
       },
       records,
+      subjects: dedupeWorkspaceSubjects(normalized.flatMap(workspace => workspace.subjects)),
       base_stations: stations,
       parse_warnings: warnings,
     };
@@ -2445,11 +2471,126 @@
     return subject;
   }
 
+  function dedupeWorkspaceSubjects(subjects) {
+    const seen = new Set();
+    return (subjects || []).filter(Boolean).map(user => ({ ...user, phone: normalizePhoneText(user.phone), subject: user.subject || {} })).filter(user => {
+      const key = JSON.stringify(user);
+      if (seen.has(key)) return false;
+      seen.add(key); return true;
+    });
+  }
+
+  function workspaceSubjects(subjects, subject, file, sheet, records) {
+    if (Array.isArray(subjects)) return dedupeWorkspaceSubjects(subjects);
+    const explicitPhones = uniqueTextValues(['電話號碼', '申請號碼', '設備號碼', '調閱門號', '調閱號碼', '查詢項目']
+      .flatMap(key => String((subject || {})[key] || '').split(/[、,;；\s]+/)).map(normalizePhoneText));
+    const recordPhones = uniqueTextValues(records.map(record => record.target_phone));
+    const identityPhone = explicitPhones.length === 1 ? explicitPhones[0] : !explicitPhones.length && recordPhones.length === 1 ? recordPhones[0] : '';
+    const phones = uniqueTextValues([...explicitPhones, ...recordPhones]);
+    if (!identityPhone && Object.keys(subject || {}).length) phones.unshift('');
+    return phones.map(target => ({ phone: target, subject: target === identityPhone ? subject || {} : {}, source_file: file || '', source_sheet: sheet || '', row_number: 0 }));
+  }
+
+  function networkHeader(values) {
+    const headers = values.map(canonicalHeaderText);
+    return (headers.includes('手機連到基地台的時間') && headers.includes('基地台地址')) || (headers.includes('STARTDT') && (headers.includes('CELLADDRESS') || headers.includes('CELLENDADDRESS')));
+  }
+
+  function networkRecord(data, rowNumber, sheet, fallbackPhone, warnings, stations) {
+    const get = (...keys) => { for (const key of keys) if (cellText(data[key])) return data[key]; return ''; };
+    const rawBase = get('手機連到基地台的時間', 'STARTDT');
+    const rawInternet = get('連到internet的時間');
+    const validTime = value => {
+      const normalized = normalizeDatetime(value);
+      if (!normalized) return '';
+      const date = new Date(normalized + 'Z');
+      return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 19) === normalized ? normalized : '';
+    };
+    const base = validTime(rawBase), internet = validTime(rawInternet);
+    const occurred = base || internet || cellText(rawBase) || cellText(rawInternet);
+    if (!occurred && !get('用戶號碼', 'MSISDN', '用戶手機序號IMEI', 'IMEI', '基地台代碼', 'CELLID', 'CELLENDID')) return null;
+    if ((cellText(rawBase) && !base) || (cellText(rawInternet) && !internet)) warnings.push(`第 ${rowNumber} 列的連線時間無法正規化，已保留原文。`);
+    const record = baseRecord({ row_number: rowNumber, source_sheet: sheet, occurred_at: occurred, call_type: '數據', direction: 'data',
+      target_phone: normalizePhoneText(get('用戶號碼', 'MSISDN', 'PHONE')) || fallbackPhone,
+      imei: exactNumericText(get('用戶手機序號IMEI', 'IMEI')), imsi: get('IMSI'),
+      duration_seconds: toInt(base ? get('手機連到基地台的秒數', 'DURATION') : get('連到internet的秒數', 'DURATION')),
+      ended_at: normalizeDatetime(get('ENDDT')), external_ip: get('INTERNETREALIP', 'INTERNETREALIPV6'), internal_ip: get('用戶連線時被指配之內網IP', 'USERINTRAIP'), note: get('NOTE', '備註') });
+    Object.assign(record, { record_kind: 'data', base_connected_at: base || cellText(rawBase), internet_connected_at: internet || cellText(rawInternet), base_duration_seconds: toInt(get('手機連到基地台的秒數', 'DURATION')), internet_duration_seconds: toInt(get('連到internet的秒數')), location_time_source: base ? 'base' : internet ? 'internet' : 'record' });
+    addStationRef(record, stations, 'primary', exactNumericText(get('基地台代碼', 'CELLID', 'CELLENDID')), get('基地台地址', 'CELLADDRESS', 'CELLENDADDRESS'));
+    return record;
+  }
+
+  function parseNetworkXml(fileName, xml) {
+    const blocks = iterXmlBlocks(xml, '查詢結果');
+    const sections = blocks.length ? blocks : [xml];
+    const parsed = makeParsed({ fileName, carrier: firstXmlText(xml, '電信業者') || '台灣大哥大', sourceFormat: 'taiwan_mobile_network_xml', sheetName: 'XML', headerRow: 0, totalSourceRows: iterXmlBlocks(xml, '通聯資料').length, subject: {} });
+    const stations = new Map(), subjectValues = [], users = [];
+    let row = 0;
+    for (const section of sections) {
+      const context = firstXmlBlock(section, '通聯記錄查詢條件') || firstXmlBlock(xml, '通聯記錄查詢條件');
+      const subject = xmlChildren(context);
+      const phone = normalizePhoneText(subject['電話號碼'] || firstXmlText(section, '電話號碼'));
+      if (phone) subject['電話號碼'] = phone;
+      subjectValues.push(subject);
+      users.push({ phone, subject, source_file: fileName, source_sheet: 'XML', row_number: 0 });
+      for (const block of iterXmlBlocks(section, '通聯資料')) {
+        const record = networkRecord(xmlChildren(block), ++row, 'XML', phone, parsed.warnings, stations);
+        if (record) parsed.records.push(record);
+      }
+    }
+    parsed.subject = mergeSubjects(subjectValues);
+    parsed.subjects = dedupeWorkspaceSubjects(users.filter(user => user.phone || Object.keys(user.subject).length));
+    for (const record of parsed.records) if (!parsed.subjects.some(user => user.phone === record.target_phone)) parsed.subjects.push({ phone: record.target_phone, subject: {}, source_file: fileName, source_sheet: 'XML', row_number: record.row_number });
+    parsed.base_stations = [...stations.values()]; return parsed;
+  }
+
+  function parseNetworkXlsx(fileName, sheets) {
+    const parsed = makeParsed({ fileName, carrier: '台灣大哥大', sourceFormat: 'taiwan_mobile_network_xlsx', sheetName: sheets.map(sheet => sheet.title).join('、'), headerRow: 0, totalSourceRows: sheets.reduce((sum, sheet) => sum + sheet.rows.length, 0), subject: {} });
+    const stations = new Map(), seen = new Set(), users = [], contexts = [];
+    for (const sheet of sheets) {
+      let headers = null, context = {};
+      const flushContext = () => {
+        contexts.push(context);
+        const phone = normalizePhoneText(context['電話號碼'] || context['申請號碼'] || context['查詢項目']);
+        if (phone) users.push({ phone, subject: { ...context }, source_file: fileName, source_sheet: sheet.title, row_number: 0 });
+      };
+      for (const row of sheet.rows) {
+        if (networkHeader(row.values)) { headers = row.values.map(canonicalHeaderText); if (!parsed.header_row) parsed.header_row = row.rowNumber; continue; }
+        const metadata = metadataFromValues(row.values);
+        if (Object.keys(metadata).length && row.values.filter(cellText).length <= 2) {
+          if (headers || ['電話號碼', '申請號碼', '查詢項目'].some(key => metadata[key] && context[key] && metadata[key] !== context[key])) {
+            flushContext(); context = {};
+          }
+          context = { ...context, ...metadata }; headers = null; continue;
+        }
+        if (!headers || !row.values.some(cellText)) continue;
+        const data = rowDict(headers, row.rawValues || row.values);
+        const originalFile = cellText(data['來源XML']), originalRow = cellText(data['原始紀錄序號']);
+        if (originalFile && originalRow) { const key = JSON.stringify([originalFile, originalRow]); if (seen.has(key)) continue; seen.add(key); }
+        const phone = normalizePhoneText(context['電話號碼'] || context['申請號碼'] || context['查詢項目']);
+        const record = networkRecord(data, originalRow ? toInt(originalRow) : row.rowNumber, sheet.title, phone, parsed.warnings, stations);
+        if (!record) continue;
+        if (originalFile) record.source_file = originalFile;
+        parsed.records.push(record);
+        users.push({ phone: record.target_phone, subject: { ...context }, source_file: originalFile || fileName, source_sheet: sheet.title, row_number: 0 });
+      }
+      flushContext();
+    }
+    parsed.subject = mergeSubjects(contexts); parsed.subjects = dedupeWorkspaceSubjects(users); parsed.base_stations = [...stations.values()]; return parsed;
+  }
+
   function parseTwmCspXml(fileName, xml) {
+    const sections = iterXmlBlocks(xml, 'RECORD');
+    if (sections.length) {
+      const merged = mergeWorkspaces(sections.map(section => makeWorkspace(parseTwmCspXml(fileName, innerXml(section)))));
+      const parsed = makeParsed({ fileName, carrier: merged.case.carrier, sourceFormat: 'taiwan_mobile_csp_xml_data_session', sheetName: 'XML', headerRow: 0, totalSourceRows: merged.case.total_source_rows, subject: merged.case.subject });
+      parsed.records = merged.records; parsed.subjects = merged.subjects; parsed.base_stations = merged.base_stations; parsed.warnings = merged.parse_warnings;
+      return parsed;
+    }
     const customer = xmlChildren(firstXmlBlock(xml, "CUSTOMERINFO") || "");
     const subject = compactObject({
       "用戶名稱": customer["NAME"] || "",
-      "申請號碼": normalizePhoneText(customer["MSISDN"] || ""),
+      "申請號碼": normalizePhoneText(customer["MSISDN"] || customer["PHONE"] || ""),
       "身份證字號": customer["ID"] || "",
       "生日": normalizeDate(customer["BIRTHDAY"] || ""),
       "帳寄地址": customer["BILLINGADDRESS"] || "",
@@ -2469,11 +2610,11 @@
     iterXmlBlocks(xml, "CELLINFO").forEach((block, index) => {
       const data = xmlChildren(block);
       const occurredAt = normalizeDatetime(data["STARTDT"]);
-      if (!occurredAt) return;
+      if (!occurredAt && !cellText(data["STARTDT"])) return;
       const record = baseRecord({
         row_number: index + 1,
         call_type: "數據",
-        occurred_at: occurredAt,
+        occurred_at: occurredAt || cellText(data["STARTDT"]),
         ended_at: normalizeDatetime(data["ENDDT"], false),
         duration_seconds: toInt(data["DURATION"]),
         target_phone: normalizePhoneText(data["MSISDN"]) || targetPhone,

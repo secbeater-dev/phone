@@ -6,7 +6,7 @@ const root = path.resolve(__dirname, '..');
 const { version } = JSON.parse(fs.readFileSync(path.join(__dirname, 'release-version.json'), 'utf8'));
 if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(version)) throw new Error('Invalid release asset version.');
 
-const entryAssets = ['vendor/xlsx.full.min.js', 'attachment-export.js', 'dataset-client.js', 'dataset-ui.js', 'app.js'];
+const entryAssets = ['vendor/xlsx.full.min.js', 'attachment-export.js', 'dataset-client.js', 'phone-cards-ui.js', 'multi-location-ui.js', 'dataset-ui.js', 'app.js'];
 const delayedAssets = ['vendor/exceljs.min.js', 'vendor/pdf-lib.min.js', 'vendor/fontkit.umd.min.js', 'vendor/open-huninn-data.js'];
 const datasetWorkerAssets = [
   'vendor/zip-no-worker-inflate-2.7.57.min.js',
@@ -14,6 +14,7 @@ const datasetWorkerAssets = [
   'cdr-model.js',
   'streaming-xlsx.js',
   'dataset-store.js',
+  'location-store.js',
   'dataset-report.js',
   'vendor/xlsx.full.min.js',
   'attachment-export.js',
